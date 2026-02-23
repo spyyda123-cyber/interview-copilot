@@ -8,6 +8,7 @@ import { uploadResume, type ResumeUploadResponse } from "@/src/lib/api";
 export default function ResumePage() {
   const router = useRouter();
   const [studentId, setStudentId] = useState<number | null>(null);
+  const [licenseKey, setLicenseKey] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,11 +16,12 @@ export default function ResumePage() {
 
   useEffect(() => {
     const storedStudentId = sessionStorage.getItem("student_id");
+    const storedLicenseKey = sessionStorage.getItem("license_key");
     const storedTargetId = sessionStorage.getItem("target_id");
 
     // Guard: redirect if previous steps not completed
-    if (!storedStudentId) {
-      router.push("/onboarding");
+    if (!storedStudentId || !storedLicenseKey) {
+      router.push("/license");
       return;
     }
     
@@ -29,6 +31,7 @@ export default function ResumePage() {
     }
 
     setStudentId(Number(storedStudentId));
+    setLicenseKey(storedLicenseKey);
   }, [router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -36,7 +39,7 @@ export default function ResumePage() {
     setError(null);
     setResult(null);
 
-    if (!studentId) return;
+    if (!studentId || !licenseKey) return;
 
     if (!file) {
       setError("Please upload your resume as a PDF.");
@@ -53,6 +56,7 @@ export default function ResumePage() {
     try {
       const response = await uploadResume(file, {
         studentId,
+        licenseKey,
       });
       sessionStorage.setItem("resume_id", String(response.resume_id));
       setResult(response);

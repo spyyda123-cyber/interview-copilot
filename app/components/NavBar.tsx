@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getHealth } from "@/src/lib/api";
 
 export default function NavBar() {
+  const router = useRouter();
   const [apiStatus, setApiStatus] = useState<"ok" | "down" | "checking">(
     "checking"
   );
@@ -38,6 +40,29 @@ export default function NavBar() {
       ? "border-rose-200 bg-rose-50 text-rose-600"
       : "border-slate-200 bg-slate-50 text-slate-500";
 
+  const handleResetSession = () => {
+    const keysToClear = [
+      "student_id",
+      "student_name",
+      "student_email",
+      "license_key",
+      "company_name",
+      "interview_date",
+      "role",
+      "target_id",
+      "resume_id",
+      "primary_skill",
+      "known_skills",
+      "support_mode",
+      "tone",
+      "coding_required",
+      "jd_text",
+    ];
+
+    keysToClear.forEach((key) => sessionStorage.removeItem(key));
+    router.replace("/license");
+  };
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -53,6 +78,13 @@ export default function NavBar() {
       >
         API {apiStatus === "checking" ? "Checking" : apiStatus}
       </span>
+      <button
+        type="button"
+        onClick={handleResetSession}
+        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition hover:bg-slate-50"
+      >
+        Reset Session
+      </button>
     </header>
   );
 }

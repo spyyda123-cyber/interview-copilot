@@ -21,30 +21,46 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [interviewDate, setInterviewDate] = useState("");
+  const [role, setRole] = useState("");
   const [primarySkill, setPrimarySkill] = useState("");
   const [knownSkills, setKnownSkills] = useState("");
-  const [timeLeftDays, setTimeLeftDays] = useState("10");
   const [supportMode, setSupportMode] = useState(SUPPORT_OPTIONS[0].value);
   const [tone, setTone] = useState(TONE_OPTIONS[0].value);
   const [codingRequired, setCodingRequired] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getDaysRemaining = () => {
+    if (!interviewDate) return null;
+    const today = new Date();
+    const interview = new Date(interviewDate);
+    const diff = Math.ceil(
+      (interview.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return diff > 0 ? diff : 1;
+  };
+
   useEffect(() => {
     const storedName = sessionStorage.getItem("student_name");
     const storedEmail = sessionStorage.getItem("student_email");
+    const storedCompanyName = sessionStorage.getItem("company_name");
+    const storedInterviewDate = sessionStorage.getItem("interview_date");
+    const storedRole = sessionStorage.getItem("role");
     const storedPrimarySkill = sessionStorage.getItem("primary_skill");
     const storedKnownSkills = sessionStorage.getItem("known_skills");
-    const storedTime = sessionStorage.getItem("time_left_days");
     const storedSupport = sessionStorage.getItem("support_mode");
     const storedTone = sessionStorage.getItem("tone");
     const storedCoding = sessionStorage.getItem("coding_required");
 
     if (storedName) setName(storedName);
     if (storedEmail) setEmail(storedEmail);
+    if (storedCompanyName) setCompanyName(storedCompanyName);
+    if (storedInterviewDate) setInterviewDate(storedInterviewDate);
+    if (storedRole) setRole(storedRole);
     if (storedPrimarySkill) setPrimarySkill(storedPrimarySkill);
     if (storedKnownSkills) setKnownSkills(storedKnownSkills);
-    if (storedTime) setTimeLeftDays(storedTime);
     if (storedSupport) setSupportMode(storedSupport);
     if (storedTone) setTone(storedTone);
     if (storedCoding) setCodingRequired(storedCoding === "true");
@@ -53,6 +69,11 @@ export default function OnboardingPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+
+    if (!email.trim()) {
+      setError("License activation data is missing. Please activate your license again.");
+      return;
+    }
 
     const parsedSkills = knownSkills
       .split(",")
@@ -66,7 +87,6 @@ export default function OnboardingPage() {
         email: email.trim(),
         primary_skill: primarySkill.trim(),
         known_skills: parsedSkills,
-        time_left_days: Number(timeLeftDays),
         support_mode: supportMode,
         tone,
         coding_required: codingRequired,
@@ -77,7 +97,6 @@ export default function OnboardingPage() {
       sessionStorage.setItem("student_email", email.trim());
       sessionStorage.setItem("primary_skill", primarySkill.trim());
       sessionStorage.setItem("known_skills", parsedSkills.join(", "));
-      sessionStorage.setItem("time_left_days", String(timeLeftDays));
       sessionStorage.setItem("support_mode", supportMode);
       sessionStorage.setItem("tone", tone);
       sessionStorage.setItem("coding_required", String(codingRequired));
@@ -107,30 +126,37 @@ export default function OnboardingPage() {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-lg shadow-slate-200/40 backdrop-blur">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">Company Name:</span>{" "}
+            {companyName || "-"}
+          </p>
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">Role:</span> {role || "-"}
+          </p>
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">Interview Date:</span>{" "}
+            {interviewDate || "-"}
+          </p>
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">Days Remaining:</span>{" "}
+            {getDaysRemaining() ?? "-"}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-lg shadow-slate-200/40 backdrop-blur">
         <form className="space-y-6" onSubmit={handleSubmit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Full name
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                placeholder="Alex Morgan"
-              />
-            </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Email address
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                placeholder="alex@email.com"
-              />
-            </label>
-          </div>
+          <label className="space-y-2 text-sm font-medium text-slate-700">
+            Full name
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              placeholder="Alex Morgan"
+            />
+          </label>
 
           <label className="space-y-2 text-sm font-medium text-slate-700">
             Primary skill focus
@@ -153,33 +179,20 @@ export default function OnboardingPage() {
             />
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Days left to prepare
-              <input
-                type="number"
-                min={1}
-                value={timeLeftDays}
-                onChange={(event) => setTimeLeftDays(event.target.value)}
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-              />
-            </label>
-            <label className="space-y-2 text-sm font-medium text-slate-700">
-              Support mode
-              <select
-                value={supportMode}
-                onChange={(event) => setSupportMode(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-              >
-                {SUPPORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <label className="space-y-2 text-sm font-medium text-slate-700">
+            Support mode
+            <select
+              value={supportMode}
+              onChange={(event) => setSupportMode(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            >
+              {SUPPORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2 text-sm font-medium text-slate-700">

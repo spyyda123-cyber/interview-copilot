@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import NavBar from "./components/NavBar";
+import ActivationGuard from "./components/ActivationGuard";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -31,8 +31,9 @@ export default function RootLayout({
       >
         <div className="min-h-screen bg-slate-50 bg-[radial-gradient(circle_at_top,_#e2e8f0,_#f8fafc_60%,_#ffffff_100%)]">
           <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
-            <NavBar />
-            <main className="mt-10 flex-1">{children}</main>
+            <ActivationGuard>
+              <main className="mt-10 flex-1">{children}</main>
+            </ActivationGuard>
           </div>
         </div>
       </body>

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import LoadingSpinner from "../components/LoadingSpinner";
 import {
   generatePrep,
   getLatestPrep,
-  getPlanStatus,
+  getPrepStatus,
   type PlanDetailResponse,
 } from "@/src/lib/api";
 
@@ -32,12 +32,39 @@ const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_ATTEMPTS = 60;
 const AUTO_RETRY_MAX = 10;
 
+const TERMINAL_ERROR_STATUSES = new Set(["failed", "failure", "error", "unknown"]);
+
 export default function PlanPage() {
   const router = useRouter();
-  const [studentId, setStudentId] = useState<number | null>(null);
-  const [companyName, setCompanyName] = useState("");
-  const [role, setRole] = useState("");
-  const [daysAvailable, setDaysAvailable] = useState<number | null>(null);
+  const goToTargetAnalysis = () => {
+    router.push("/target");
+  };
+  const [studentId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const storedStudentId = sessionStorage.getItem("student_id");
+    return storedStudentId ? Number(storedStudentId) : null;
+  });
+  const [licenseKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("license_key") ?? "";
+  });
+  const [targetId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const storedTargetId = sessionStorage.getItem("target_id");
+    return storedTargetId ? Number(storedTargetId) : null;
+  });
+  const [companyName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("company_name") ?? "";
+  });
+  const [role] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("role") ?? "";
+  });
+  const [interviewDate] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("interview_date") ?? "";
+  });
   const [planDetails, setPlanDetails] = useState<PlanDetailResponse | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -47,13 +74,27 @@ export default function PlanPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getDaysRemaining = () => {
+    if (!interviewDate) return null;
+    const today = new Date();
+    const interview = new Date(interviewDate);
+    const diff = Math.ceil(
+      (interview.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return diff > 0 ? diff : 1;
+  };
+
   useEffect(() => {
-    const storedStudentId = sessionStorage.getItem("student_id");
     const storedResumeId = sessionStorage.getItem("resume_id");
 
     // Guard: redirect if previous steps not completed
-    if (!storedStudentId) {
-      router.push("/onboarding");
+    if (!studentId || !licenseKey) {
+      router.push("/license");
+      return;
+    }
+
+    if (!targetId) {
+      router.push("/target");
       return;
     }
 
@@ -61,22 +102,7 @@ export default function PlanPage() {
       router.push("/resume");
       return;
     }
-
-    const storedCompanyName = sessionStorage.getItem("company_name");
-    const storedRole = sessionStorage.getItem("role");
-    const storedDays = sessionStorage.getItem("time_left_days");
-
-    setStudentId(Number(storedStudentId));
-    if (storedCompanyName) {
-      setCompanyName(storedCompanyName);
-    }
-    if (storedRole) {
-      setRole(storedRole);
-    }
-    if (storedDays) {
-      setDaysAvailable(Number(storedDays));
-    }
-  }, [router]);
+  }, [licenseKey, router, studentId, targetId]);
 
   const planJson = useMemo(() => {
     const data = planDetails?.plan_json as PlanJson | undefined;
@@ -84,7 +110,7 @@ export default function PlanPage() {
   }, [planDetails]);
 
   const handleGeneratePlan = async () => {
-    if (!studentId) return;
+    if (!studentId || !licenseKey || !targetId) return;
 
     setError(null);
     setTaskStatus(null);
@@ -93,30 +119,55 @@ export default function PlanPage() {
     setLoading(true);
 
     try {
-      const response = await generatePrep(studentId);
+      const response = await generatePrep(studentId, licenseKey);
       setTaskStatus(response.status);
       setTaskId(response.task_id);
+
+      if (response.status === "ready") {
+        const latest = await getLatestPrep(studentId, licenseKey, targetId);
+        setPlanDetails(latest);
+        setLoading(false);
+        return;
+      }
+
+      if (response.status === "missing") {
+        setLoading(false);
+        setError(
+          "Plan not found for this active session. Please run Target Analysis again for the same license/session, then retry."
+        );
+        return;
+      }
 
       let attempts = 0;
       const poll = async () => {
         attempts += 1;
         try {
-          const statusResponse = await getPlanStatus(response.task_id);
+          const statusResponse = await getPrepStatus(studentId, licenseKey, targetId);
           setTaskStatus(statusResponse.status);
+          setTaskId(statusResponse.task_id || null);
           setLastChecked(new Date().toLocaleTimeString());
 
-          if (statusResponse.status === "success") {
-            const latest = await getLatestPrep(studentId);
+          if (statusResponse.status === "ready") {
+            const latest = await getLatestPrep(studentId, licenseKey, targetId);
             setPlanDetails(latest);
             setAutoRetry(false);
             setLoading(false);
             return;
           }
 
-          if (statusResponse.status === "failure") {
+          if (statusResponse.status === "missing") {
             setLoading(false);
             setAutoRetry(false);
-            setError("Plan generation failed. Please try again.");
+            setError(
+              "Plan not found for this active session. Please run Target Analysis again for the same license/session, then retry."
+            );
+            return;
+          }
+
+          if (TERMINAL_ERROR_STATUSES.has(statusResponse.status)) {
+            setLoading(false);
+            setAutoRetry(false);
+            setError("Plan generation failed. Please try generating again.");
             return;
           }
 
@@ -143,17 +194,30 @@ export default function PlanPage() {
     }
   };
 
-  const refreshStatus = async () => {
-    if (!taskId) return;
+  const refreshStatus = useCallback(async () => {
+    if (!studentId || !licenseKey || !targetId) return;
     try {
-      const response = await getPlanStatus(taskId);
+      const response = await getPrepStatus(studentId, licenseKey, targetId);
       setTaskStatus(response.status);
+      setTaskId(response.task_id || null);
       setLastChecked(new Date().toLocaleTimeString());
+
+      if (response.status === "ready") {
+        const latest = await getLatestPrep(studentId, licenseKey, targetId);
+        setPlanDetails(latest);
+        setLoading(false);
+        return;
+      }
+
+      if (TERMINAL_ERROR_STATUSES.has(response.status)) {
+        setLoading(false);
+        setError("Plan generation failed. Please try generating again.");
+      }
     } catch {
       setTaskStatus("unknown");
       setLastChecked(new Date().toLocaleTimeString());
     }
-  };
+  }, [licenseKey, studentId, targetId]);
 
   useEffect(() => {
     if (!autoRetry || !taskId) return;
@@ -168,23 +232,32 @@ export default function PlanPage() {
       refreshStatus();
     }, 8000);
     return () => clearInterval(timer);
-  }, [autoRetry, taskId]);
+  }, [autoRetry, refreshStatus, taskId]);
 
   useEffect(() => {
-    if (!taskId || !loading) return;
+    if (!studentId || !licenseKey || !targetId || !loading) return;
 
     let isMounted = true;
     const pollStatus = async () => {
       try {
-        const response = await getPlanStatus(taskId);
+        const response = await getPrepStatus(studentId, licenseKey, targetId);
         if (isMounted) {
           setTaskStatus(response.status);
+          setTaskId(response.task_id || null);
           setLastChecked(new Date().toLocaleTimeString());
+
+          if (response.status === "ready") {
+            const latest = await getLatestPrep(studentId, licenseKey, targetId);
+            setPlanDetails(latest);
+            setLoading(false);
+          }
         }
       } catch {
         if (isMounted) {
           setTaskStatus("unknown");
           setLastChecked(new Date().toLocaleTimeString());
+          setLoading(false);
+          setError("Could not check plan status. Please refresh and try again.");
         }
       }
     };
@@ -195,7 +268,7 @@ export default function PlanPage() {
       isMounted = false;
       clearInterval(timer);
     };
-  }, [taskId, loading]);
+  }, [studentId, licenseKey, targetId, loading]);
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-8">
@@ -213,6 +286,28 @@ export default function PlanPage() {
 
       {studentId && (
         <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-lg shadow-slate-200/40 backdrop-blur">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <p className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-900">Company:</span>{" "}
+              {companyName || "-"}
+            </p>
+            <p className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-900">Role:</span> {role || "-"}
+            </p>
+            <p className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-900">Interview Date:</span>{" "}
+              {interviewDate || "-"}
+            </p>
+            <p className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-900">Days Remaining:</span>{" "}
+              {getDaysRemaining() ?? "-"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {studentId && (
+        <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-lg shadow-slate-200/40 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm font-semibold text-slate-900">
@@ -220,7 +315,6 @@ export default function PlanPage() {
               </p>
               <p className="text-sm text-slate-500">
                 {role || "Target role"}
-                {daysAvailable ? ` · ${daysAvailable} days` : ""}
               </p>
             </div>
             <button
@@ -270,6 +364,15 @@ export default function PlanPage() {
           {error ? (
             <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
               {error}
+              {taskStatus === "missing" ? (
+                <button
+                  type="button"
+                  onClick={goToTargetAnalysis}
+                  className="mt-3 inline-flex items-center rounded-full border border-rose-300 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-rose-700 transition hover:bg-rose-100"
+                >
+                  Go to Target Analysis
+                </button>
+              ) : null}
             </div>
           ) : null}
 

@@ -1,1 +1,1 @@
-export { default } from "./onboarding/page";
+export { default } from "./license/page";
