@@ -14,16 +14,17 @@
  *   - GET /prep/status (poll generation status)
  *   - GET /prep/latest (fetch completed plan)
  *
- * FLOW:
+ * FLOW (UPDATED - Generation now starts during resume upload):
  * 1. Page loads, checks all required session keys exist
- * 2. User clicks "Generate Plan" button
- * 3. Calls generatePrep() → returns task_id and status
- *    - If status="ready": existing plan found, fetch details immediately
- *    - If status="generating": new generation queued, start polling
- * 4. Polling loop: getPrepStatus() every 5 seconds (POLL_INTERVAL_MS)
+ * 2. useEffect immediately calls generatePrep() on mount (fire-and-forget from resume upload)
+ *    - If status="ready": plan already generated, fetch and display immediately
+ *    - If status="generating": plan is generating in background, start polling
+ *    - If status="failed": show error, allow manual retry
+ * 3. Polling loop: getPrepStatus() every 5 seconds (POLL_INTERVAL_MS)
  *    - Shows spinner while status="generating"
- *    - Stops polling when status becomes "ready" or "error"
- * 5. On status="ready": call getLatestPrep() to fetch full plan details
+ *    - Stops polling when status becomes "ready" or error
+ * 4. On status="ready": call getLatestPrep() to fetch full plan details
+ * 5. Button "View My Plan" only checks status (doesn't trigger generation)
  * 6. Render plan_json as daily task list
  *
  * GENERATION CACHING (CRITICAL OPTIMIZATION):
@@ -186,38 +187,13 @@ export default function PlanPage() {
     return diff > 0 ? diff : 1;
   };
 
-  useEffect(() => {
-    const storedResumeId = sessionStorage.getItem("resume_id");
-
-    // Guard: redirect if previous steps not completed
-    if (!studentId || !licenseKey) {
-      router.push("/license");
-      return;
-    }
-
-    if (!targetId) {
-      router.push("/target");
-      return;
-    }
-
-    if (!storedResumeId) {
-      router.push("/resume");
-      return;
-    }
-  }, [licenseKey, router, studentId, targetId]);
-
-  const planJson = useMemo(() => {
-    const data = planDetails?.plan_json as PlanJson | undefined;
-    return data ?? {};
-  }, [planDetails]);
-
-  const handleGeneratePlan = async () => {
+  // OPTIMIZATION: On page load, immediately check plan status.
+  // Plan generation was enqueued during resume upload (fire-and-forget).
+  // This just checks current status and fetches plan if ready.
+  const initializePlanStatus = useCallback(async () => {
     if (!studentId || !licenseKey || !targetId) return;
 
     setError(null);
-    setTaskStatus(null);
-    setTaskId(null);
-    setPlanDetails(null);
     setLoading(true);
 
     try {
@@ -240,61 +216,44 @@ export default function PlanPage() {
         return;
       }
 
-      let attempts = 0;
-      const poll = async () => {
-        attempts += 1;
-        try {
-          const statusResponse = await getPrepStatus(studentId, licenseKey, targetId);
-          setTaskStatus(statusResponse.status);
-          setTaskId(statusResponse.task_id || null);
-          setLastChecked(new Date().toLocaleTimeString());
-
-          if (statusResponse.status === "ready") {
-            const latest = await getLatestPrep(studentId, licenseKey, targetId);
-            setPlanDetails(latest);
-            setAutoRetry(false);
-            setLoading(false);
-            return;
-          }
-
-          if (statusResponse.status === "missing") {
-            setLoading(false);
-            setAutoRetry(false);
-            setError(
-              "Plan not found for this active session. Please run Target Analysis again for the same license/session, then retry."
-            );
-            return;
-          }
-
-          if (TERMINAL_ERROR_STATUSES.has(statusResponse.status)) {
-            setLoading(false);
-            setAutoRetry(false);
-            setError("Plan generation failed. Please try generating again.");
-            return;
-          }
-
-          if (attempts < MAX_POLL_ATTEMPTS) {
-            setTimeout(poll, POLL_INTERVAL_MS);
-          } else {
-            setLoading(false);
-            setError(
-              "Plan generation is still running. Check again in a minute."
-            );
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "";
-          setLoading(false);
-          setError(message || "Failed to fetch plan status.");
-        }
-      };
-
-      poll();
+      // Status is 'generating' - start polling
+      setLoading(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Plan generation failed.";
+      const message = err instanceof Error ? err.message : "Failed to initialize plan.";
       setError(message);
       setLoading(false);
     }
-  };
+  }, [studentId, licenseKey, targetId]);
+
+  useEffect(() => {
+    const storedResumeId = sessionStorage.getItem("resume_id");
+
+    // Guard: redirect if previous steps not completed
+    if (!studentId || !licenseKey) {
+      router.push("/license");
+      return;
+    }
+
+    if (!targetId) {
+      router.push("/target");
+      return;
+    }
+
+    if (!storedResumeId) {
+      router.push("/resume");
+      return;
+    }
+
+    // OPTIMIZATION: On page load, automatically initialize plan status.
+    // Plan generation was already enqueued during resume upload.
+    // This just checks current status without triggering new generation.
+    initializePlanStatus();
+  }, [licenseKey, router, studentId, targetId, initializePlanStatus]);
+
+  const planJson = useMemo(() => {
+    const data = planDetails?.plan_json as PlanJson | undefined;
+    return data ?? {};
+  }, [planDetails]);
 
   const refreshStatus = useCallback(async () => {
     if (!studentId || !licenseKey || !targetId) return;
@@ -379,10 +338,10 @@ export default function PlanPage() {
           Step 4 of 4 · Preparation Plan
         </p>
         <h1 className="text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
-          Build a day-by-day preparation plan tailored to your resume and goal.
+          Your personalized preparation plan
         </h1>
         <p className="text-base text-slate-600">
-          Generate the plan when you are ready. We will poll until the AI plan is ready.
+          Your interview preparation plan is being created. Check back to view it when ready.
         </p>
       </div>
 
@@ -421,11 +380,11 @@ export default function PlanPage() {
             </div>
             <button
               type="button"
-              onClick={handleGeneratePlan}
-              disabled={loading || autoRetry}
+              onClick={refreshStatus}
+              disabled={!taskId}
               className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {loading ? <LoadingSpinner /> : "Generate Plan"}
+              View My Plan
             </button>
           </div>
 
@@ -447,9 +406,9 @@ export default function PlanPage() {
             </p>
           ) : null}
 
-          {loading && taskStatus ? (
-            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-              Generating plan. This can take a few minutes.
+          {loading && taskStatus === "generating" ? (
+            <p className="mt-3 text-sm text-slate-600">
+              Your personalized interview plan is being prepared…
             </p>
           ) : null}
 
