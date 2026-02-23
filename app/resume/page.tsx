@@ -1,3 +1,81 @@
+/**
+ * RESUME UPLOAD PAGE (/resume)
+ *
+ * Purpose: Collect student resume (PDF) for parsing and gap analysis against job description.
+ *
+ * DEPENDENCIES:
+ * - Requires: student_id, license_key, target_id in sessionStorage
+ * - Requires: Target interview analysis completed (from /target page)
+ * - Protected by: ActivationGuard
+ * - Backend endpoint: POST /resume/upload
+ *
+ * FLOW:
+ * 1. User arrives from onboarding flow or back-navigation
+ * 2. Validation: Check student_id, license_key, target_id exist (redirect if missing)
+ * 3. User selects PDF file from computer
+ * 4. Form calls uploadResume() API with file + metadata
+ * 5. Backend processes:
+ *    - Validates PDF format
+ *    - Extracts text from PDF (parse_resume_task in Celery)
+ *    - Classifies sections (experience, education, skills, etc)
+ *    - Compares resume skills vs target JD required_skills
+ *    - Creates ResumeGapAnalysis record
+ * 6. Response includes: resume_id, missing_skills, ats_score
+ * 7. Frontend stores resume_id + displays gap analysis results
+ * 8. User clicks "Continue" → /prep (plan generation uses this resume)
+ *
+ * FORM BEHAVIOR:
+ * - File input accepts .pdf files only
+ * - Frontend validates: file.type === "application/pdf" and file.name.endsWith(".pdf")
+ * - Backend re-validates: 400 error if not PDF
+ * - Shows loading spinner during upload and parsing
+ * - Parsing happens async (Celery worker), response returns resume_id immediately
+ *
+ * RESPONSE FIELDS (ResumeUploadResponse):
+ * - resume_id: Unique resume identifier (stored in sessionStorage for reference)
+ * - status: "processing" or "complete" (parsing status)
+ * - missing_skills: Array of skills from target JD not found in resume
+ *   Example: ["Kubernetes", "Docker", "AWS Lambda"]
+ *   Purpose: User understands what they need to learn
+ * - ats_score: Applicant Tracking System keyword match (0-100)
+ *   Purpose: Indicates how well resume matches JD keywords
+ *
+ * ERROR HANDLING:
+ * - 403: License invalid → redirected to /license (api.ts)
+ * - 404: Student profile or target not found
+ * - 400: Invalid file format (not PDF)
+ * - Frontend validation: "Please upload your resume as a PDF"
+ * - Network timeout: "Upload failed. Try again."
+ *
+ * SESSION KEYS:
+ * READ: student_id, license_key (from activation), target_id (from target analysis)
+ * WRITE: resume_id (stored for reference in plan generation)
+ *
+ * STEP GUARD:
+ * - Validates previous steps completed:
+ *   - If no student_id/license_key → redirect to /license (step 1)
+ *   - If no target_id → redirect to /target (step 3)
+ * - This prevents user from skipping steps or accessing with incomplete state
+ * - Ensures backend has all required data to generate meaningful plan
+ *
+ * WHAT BREAKS IF REMOVED:
+ * - No resume parsing (backend can't extract sections)
+ * - No gap analysis (backend can't compare against target JD)
+ * - Learning plan can't focus on resume weaknesses
+ * - ATS score feedback lost
+ * - Resume context passed to Gemini plan generation would be missing
+ *
+ * BACKEND ASYNC:
+ * - PDF parsing happens in parse_resume_task (Celery worker)
+ * - Response returns resume_id immediately (parsing continues in background)
+ * - Frontend doesn't wait for parsing to complete
+ * - Gap analysis created asynchronously as well
+ * - /prep pipeline uses latest resume when generating plan
+ *
+ * Used by: ActivationGuard (protected route)
+ * Previous: /onboarding → /target (job description)
+ * Next: /prep (plan generation, uses resume_id indirectly)
+ */
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";

@@ -1,3 +1,80 @@
+/**
+ * TARGET INTERVIEW PAGE (/target)
+ *
+ * Purpose: Collect job description for analysis - extract required skills, difficulty, and interview format.
+ *
+ * DEPENDENCIES:
+ * - Requires: student_id, license_key, company_name, interview_date in sessionStorage
+ * - Protected by: ActivationGuard
+ * - Backend endpoints: POST /target/analyze, GET /target/status
+ *
+ * FLOW:
+ * 1. User arrives from /onboarding
+ * 2. Form pre-filled with company_name + role from license/session
+ * 3. User pastes job description (JD) into textarea
+ * 4. Form calls analyzeTarget() API
+ * 5. Backend enqueues analyze_target_task (Celery worker)
+ * 6. Response includes target_id
+ * 7. Frontend polls getTargetStatus(target_id) every 4 seconds (POLL_INTERVAL_MS)
+ * 8. Once status="done", analysis results appear (required_skills, difficulty, round_structure)
+ * 9. User clicks "Continue to Plan" → redirects to /prep
+ *
+ * FORM FIELDS:
+ * - company_name: Pre-filled from /license (read-only in some versions, locked)
+ *   Purpose: Ensure user analyzes JD for correct company
+ *   Validation: Must not be empty, backend validates matches license company
+ * - role: Optional job title (e.g., "Backend Engineer", "Senior Python Developer")
+ *   Pre-filled from license if available
+ *   Used: Passed to analyzeTarget for role-specific context
+ * - jd_text: Full job description text (user copy-pastes from job posting)
+ *   Persisted: Stored in sessionStorage for reference
+ *   Used: Sent to Gemini for skill extraction and format analysis
+ *
+ * ASYNC ANALYSIS BEHAVIOR:
+ * - analyzeTarget() returns immediately with target_id (doesn't wait)
+ * - Status cycle: submit → status="processing" → wait for analysis
+ * - Polling: Every 4 seconds check if analysis complete
+ * - During polling: Show spinner, disable form, show "Analyzing..." message
+ * - Completion: status becomes "done", results displayed, button changes to "Continue"
+ * - Failure: status becomes "error" after ~10 min or worker crash
+ *
+ * ANALYSIS RESULTS (once status="done"):
+ * - required_skills: Array of skills extracted from JD (e.g., ["Python", "REST APIs", "PostgreSQL"])
+ *   Purpose: Used by resume gap analysis, influences learning plan
+ * - difficulty: Level assessment (e.g., "mid-level", "senior")
+ *   Purpose: Affects task density and complexity in learning plan
+ * - round_structure: Interview format description (e.g., "phone screen + 2 coding rounds + behavioral")
+ *   Purpose: Informs learning plan focus areas
+ *
+ * ERROR HANDLING:
+ * - 403: License invalid → redirected to /license (by api.ts clearSessionAndRedirectToLicense)
+ * - 404: Student not found, target JD too short
+ * - Timeout after 10 minutes: status="error", show "Analysis failed, please retry"
+ * - Network error: "Request timed out, please try again"
+ * - User retry: startAnalysis() called again, new target_id generated
+ *
+ * SESSION KEYS:
+ * READ: student_id, license_key, company_name, role (from /license activation)
+ * WRITE: target_id (for /prep to reference), jd_text (for reference)
+ *
+ * WHAT BREAKS IF REMOVED:
+ * - No job description analysis
+ * - No required_skills extraction (plan would be generic)
+ * - No difficulty/round_structure info (plan can't tailor to interview format)
+ * - Resume gap analysis can't compare against actual JD requirements
+ * - Plan would be far less valuable
+ *
+ * POLLING PATTERN:
+ * - useEffect watches status state
+ * - When status="processing" and targetId exists, polling effect runs
+ * - Uses setTimeout for non-blocked polling (continues while user navigates)
+ * - Stops polling when status changes to "done" or "error"
+ * - Manual retry via "Retry Analysis" button: calls startAnalysis() again
+ *
+ * Used by: ActivationGuard (protected route)
+ * Previous: /onboarding (student profile)
+ * Next: /prep (learning plan generation, uses target_id)
+ */
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";

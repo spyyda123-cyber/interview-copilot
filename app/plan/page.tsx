@@ -1,3 +1,105 @@
+/**
+ * PLAN PAGE (/prep and /plan)
+ *
+ * Purpose: Generate and display personalized learning plan (daily interview prep tasks).
+ *
+ * NOTE: /prep re-exports this component, so both /prep and /plan render same page.
+ *
+ * DEPENDENCIES:
+ * - Requires: student_id, license_key, target_id, resume_id in sessionStorage
+ * - Requires: All previous steps completed (license → onboarding → target → resume)
+ * - Protected by: ActivationGuard
+ * - Backend endpoints:
+ *   - POST /prep/generate (initiate plan generation)
+ *   - GET /prep/status (poll generation status)
+ *   - GET /prep/latest (fetch completed plan)
+ *
+ * FLOW:
+ * 1. Page loads, checks all required session keys exist
+ * 2. User clicks "Generate Plan" button
+ * 3. Calls generatePrep() → returns task_id and status
+ *    - If status="ready": existing plan found, fetch details immediately
+ *    - If status="generating": new generation queued, start polling
+ * 4. Polling loop: getPrepStatus() every 5 seconds (POLL_INTERVAL_MS)
+ *    - Shows spinner while status="generating"
+ *    - Stops polling when status becomes "ready" or "error"
+ * 5. On status="ready": call getLatestPrep() to fetch full plan details
+ * 6. Render plan_json as daily task list
+ *
+ * GENERATION CACHING (CRITICAL OPTIMIZATION):
+ * - Backend builds signature: student_id:company:role:interview_date (deterministic)
+ * - Same signature = same plan (avoids duplicate Gemini calls)
+ * - Multiple generatePrep calls = same result (idempotent)
+ * - Once plan generated, getLatestPrep always returns cached plan (cheap)
+ * - Plan remains valid until interview_date passes
+ * - This is why plan generation is one-time per company/role/date combo
+ *
+ * PLAN STRUCTURE (plan_json):
+ * {
+ *   overview: "You have 14 days to prepare...",
+ *   daily_plan: [
+ *     {
+ *       day: 1,
+ *       focus: "API fundamentals",
+ *       tasks: [
+ *         {
+ *           title: "REST API basics",
+ *           description: "Learn HTTP methods, status codes, RESTful principles...",
+ *           duration_minutes: 90
+ *         },
+ *         ...more tasks...
+ *       ]
+ *     },
+ *     ...more days...
+ *   ]
+ * }
+ *
+ * VARIABLES FROM SESSION (READ-ONLY):
+ * - studentId: Used in generatePrep, getPrepStatus, getLatestPrep calls
+ * - licenseKey: Auth header on all calls
+ * - targetId: Identifies which interview/JD this plan is for
+ * - companyName: Display, ensures user sees correct company context
+ * - role: Display, used in plan generation
+ * - interviewDate: Compute days_remaining for user
+ *
+ * ERROR HANDLING:
+ * - 403: License invalid → redirected to /license (api.ts)
+ * - 404: Student/target/plan not found
+ * - Polling timeout after 5 minutes (MAX_POLL_ATTEMPTS = 60 attempts × 5 sec)
+ *   - Shows "Generation timed out, please try again"
+ * - Auto-retry: On temporary failures, tries up to AUTO_RETRY_MAX times
+ *   - Helpful for transient network issues or worker delays
+ * - Manual retry: "Generate Plan" button can be clicked again
+ *
+ * ASYNC POLLING MECHANISM:
+ * - generatePrep() happens on button click
+ * - Polling in background via useEffect (doesn't block UI)
+ * - User can navigate away and come back (polling continues)
+ * - localStorage persists taskId so polling survives page refresh
+ * - Polling stops automatically when status="ready" or error threshold exceeded
+ *
+ * STEP GUARDS (Prevent accessing plan without requirements):
+ * - If no studentId/licenseKey → redirect to /license (step 1)
+ * - If no targetId → redirect to /target (step 3)
+ * - If no resumeId → redirect to /resume (step 4)
+ * - Ensures backend has all context before plan generation
+ *
+ * WHAT BREAKS IF REMOVED:
+ * - No learning plan display
+ * - Users have no structured interview prep guidance
+ * - Must return to backend to generate plans manually
+ * - No async Celery-based generation (would need to wait for response)
+ *
+ * CONSTANTS:
+ * - POLL_INTERVAL_MS: 5000 (check status every 5 seconds)
+ * - MAX_POLL_ATTEMPTS: 60 (stop after 300 seconds = 5 minutes)
+ * - AUTO_RETRY_MAX: 10 (retry up to 10 times on transient errors)
+ * - TERMINAL_ERROR_STATUSES: Set of statuses that stop polling
+ *
+ * Used by: ActivationGuard (protected route)
+ * Previous: /resume (resume upload)
+ * Final step in onboarding flow
+ */
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";

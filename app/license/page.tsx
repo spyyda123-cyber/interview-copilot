@@ -1,3 +1,63 @@
+/**
+ * LICENSE ACTIVATION PAGE (/license)
+ *
+ * Purpose: First step in user onboarding - activate license key to gain access to the system.
+ *
+ * FLOW:
+ * 1. User visits app, redirected here by ActivationGuard (if no student_id + license_key)
+ * 2. User enters: email, name, license_key
+ * 3. Form calls activateLicense() API
+ * 4. Backend validates license_key against PrepLicense model
+ * 5. Backend returns: student_id, company_name, interview_date
+ * 6. Frontend stores these in sessionStorage
+ * 7. ActivationGuard detects change, redirects to /onboarding
+ *
+ * FORM FIELDS:
+ * - email: User contact email (passed to backend for student creation)
+ * - name: User full name (passed to backend, displayed in UI)
+ * - license_key: Unique activation code (e.g., "GOOGLE-2026-ABC123")
+ *   Format set by backend admin at license generation time
+ *
+ * BACKEND VALIDATION (POST /license/activate):
+ * - Validates license_key exists in PrepLicense table
+ * - Validates license is marked status="unused" (not already activated)
+ * - Validates interview_date is in future (auto-expires if past)
+ * - Returns student_id (may be NULL if first-time activation)
+ * - Returns company_name (required, set when license created)
+ * - Returns interview_date (required, set when license created)
+ *
+ * SESSION STORAGE ON SUCCESS:
+ * Sets these keys for protected pages to access:
+ * - student_id: Backend student record ID
+ * - license_key: What user entered (used for auth on all protected API calls)
+ * - student_name: Echoes input name
+ * - student_email: Echoes input email
+ * - company_name: From license (read-only, interview company)
+ * - interview_date: From license (read-only, interview date)
+ * - role: Optional, from license (job title)
+ *
+ * ERROR HANDLING:
+ * - Invalid license_key (404) → "License key not found"
+ * - License already activated (409) → "License already in use"
+ * - License expired (410) → "License has expired"
+ * - Missing email or name (400) → "Please fill in all fields"
+ * - Network timeout → "Request timed out, please try again"
+ *
+ * EARLY EXIT OPTIMIZATION:
+ * - useEffect checks if already activated (student_id + license_key in session)
+ * - If yes, redirects immediately to /onboarding (skip form entirely)
+ * - If student_id exists but license_key missing (stale session), clears it
+ *
+ * WHAT BREAKS IF REMOVED:
+ * - No way for users to activate licenses
+ * - No session initialization with student_id + license_key
+ * - ActivationGuard can't detect activated users
+ * - Protected routes would always redirect to /license
+ *
+ * Used by: ActivationGuard (redirects unauthenticated users here)
+ * Next: After activation → /onboarding page
+ * Public: This page is public (no auth required)
+ */
 "use client";
 
 import { useRouter } from "next/navigation";

@@ -1,3 +1,81 @@
+/**
+ * ONBOARDING PAGE (/onboarding)
+ *
+ * Purpose: Collect student profile and learning preferences after license activation.
+ *
+ * DEPENDENCIES:
+ * - Requires: student_id, license_key in sessionStorage (set by /license page)
+ * - Protected by: ActivationGuard (redirects to /license if not authenticated)
+ * - Backend endpoint: POST /student/create
+ *
+ * FLOW:
+ * 1. User activated license on /license page
+ * 2. Redirected to /onboarding with student_id + license_key in session
+ * 3. Form loads with optional pre-filled values from sessionStorage (if returning user)
+ * 4. User enters:
+ *    - Email, name (pre-filled from /license if available)
+ *    - Company name, interview date (pre-filled from license response)
+ *    - Job role (optional, defaults to "general")
+ *    - Primary skill (main technical expertise)
+ *    - Known skills (comma-separated list)
+ *    - Support mode (guided/self/adaptive learning style)
+ *    - Tone (supportive/direct/neutral communication)
+ *    - Coding required (include hands-on coding exercises?)
+ * 5. Form calls createStudent() API
+ * 6. Backend creates StudentProfile record with preferences
+ * 7. Frontend stores profile data in sessionStorage
+ * 8. Redirects to /target (next: job description analysis)
+ *
+ * FORM FIELDS MAPPED TO BACKEND:
+ * - name → sent to POST /student/create (display name)
+ * - email → sent to POST /student/create (contact email)
+ * - company_name → fetched from sessionStorage (set by /license)
+ * - interview_date → fetched from sessionStorage (set by /license)
+ * - role → optional, sent to backend or defaults to company license role
+ * - primary_skill → sent to backend (main skill)
+ * - known_skills → sent to backend as JSON array (["Python", "SQL", ...])
+ * - support_mode → sent to backend (personalization flag)
+ * - tone → sent to backend (Gemini language tone)
+ * - coding_required → sent to backend as boolean
+ *
+ * COMPUTED FIELD:
+ * - days_remaining: Calculated from interview_date - today
+ *   Purpose: Show user how many days they have to prepare
+ *
+ * SESSION KEYS READ:
+ * - student_name, student_email: Pre-fill name/email if user went back/returned
+ * - company_name, interview_date: Pre-fill company/date from license
+ * - role: Pre-fill if user already selected role
+ * - primary_skill, known_skills: Pre-fill from previous session
+ * - support_mode, tone, coding_required: Pre-fill preferences
+ *
+ * SESSION KEYS SET (after form submission):
+ * - primary_skill, known_skills, support_mode, tone, coding_required: User prefs
+ * - (student_id remains from /license activation)
+ * - (license_key remains from /license activation)
+ *
+ * VALIDATION:
+ * - Checks email is not empty (comes from license activation, should always exist)
+ * - If missing, tells user to "activate your license again" and return to /license
+ * - required fields on all inputs (HTML form validation)
+ * - known_skills split by comma on submission
+ *
+ * ERROR HANDLING:
+ * - 404: Student profile not found
+ * - 400: Missing required fields
+ * - Network timeout: "Please try again"
+ * - Display errors in red box at bottom of form
+ *
+ * WHAT BREAKS IF REMOVED:
+ * - Users cannot provide learning preferences
+ * - No StudentProfile created, so backend has no personalization data
+ * - Plan generation would fail (backend expects StudentProfile)
+ * - Gemini has no context about skill level, support mode, tone preference
+ *
+ * Used by: ActivationGuard (protected route)
+ * Previous: /license page (activation)
+ * Next: /target page (job description analysis)
+ */
 "use client";
 
 import { useRouter } from "next/navigation";

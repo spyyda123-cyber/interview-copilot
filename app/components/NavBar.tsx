@@ -1,3 +1,37 @@
+/**
+ * NAVBAR COMPONENT
+ *
+ * Displays header with app branding, API health status, and session reset button.
+ *
+ * STRUCTURE:
+ * - Left: App title "Interview Prep Studio"
+ * - Center: Real-time API health indicator (ok | down | checking)
+ * - Right: "Reset Session" button for manual logout
+ *
+ * HEALTH CHECK:
+ * - Calls /health endpoint every 15 seconds
+ * - Shows green (ok), red (down), or gray (checking) status badge
+ * - Used to detect backend connectivity issues
+ * - Not auth-dependent (GET /health is public)
+ *
+ * RESET BUTTON:
+ * - Clears ALL session storage keys (see SESSION_KEYS_TO_CLEAR)
+ * - Redirects to /license page
+ * - User must re-activate license to continue
+ *
+ * WHEN RENDERED:
+ * - Only visible when ActivationGuard detects student_id + license_key in session
+ * - Hidden during initial load and on /license page (non-activated users)
+ * - Disappears immediately after Reset Button click (before redirect completes)
+ *
+ * SESSION KEYS CLEARED:
+ * - student_id, license_key, company_name, interview_date (core activation)
+ * - target_id, resume_id (state from current prep session)
+ * - primary_skill, known_skills, support_mode, tone, coding_required (profile data)
+ * - See app/docs/session-contract.ts for detailed key explanations
+ *
+ * Used by: ActivationGuard (conditionally renders when user is activated)
+ */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -41,6 +75,10 @@ export default function NavBar() {
       : "border-slate-200 bg-slate-50 text-slate-500";
 
   const handleResetSession = () => {
+    /**
+     * Clear all session data and redirect to license page.
+     * This is the equivalent of "logout" - user must re-activate to continue.
+     */
     const keysToClear = [
       "student_id",
       "student_name",
