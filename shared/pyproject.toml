@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interview-copilot-shared"
+version = "0.1.0"
+description = "Shared models, db, auth, and config for Interview Copilot split apps"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["shared*"]

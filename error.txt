@@ -1,0 +1,18 @@
+(psycopg2.errors.DatatypeMismatch) foreign key constraint "placement_applications_company_id_fkey" cannot be implemented
+DETAIL:  Key columns "company_id" and "id" are of incompatible types: uuid and integer.
+
+[SQL: 
+CREATE TABLE placement_applications (
+	id UUID NOT NULL, 
+	company_id UUID NOT NULL, 
+	student_id UUID NOT NULL, 
+	status VARCHAR(50) NOT NULL, 
+	created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+	updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(company_id) REFERENCES placement_companies (id), 
+	FOREIGN KEY(student_id) REFERENCES users (id)
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)

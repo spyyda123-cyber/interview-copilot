@@ -1,0 +1,5 @@
+pyproject.toml
+interview_copilot_shared.egg-info/PKG-INFO
+interview_copilot_shared.egg-info/SOURCES.txt
+interview_copilot_shared.egg-info/dependency_links.txt
+interview_copilot_shared.egg-info/top_level.txt
