@@ -1,0 +1,4 @@
+from shared.models.student import Student
+
+__all__ = ["Student"]
+

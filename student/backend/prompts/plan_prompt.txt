@@ -1,0 +1,13 @@
+Generate a structured, day-by-day interview preparation strategy for the student.
+
+Use ALL provided context: resume, company intelligence, gap analysis, and student profile.
+Tailor every task to the specific role, company, and interview format.
+
+Constraints:
+- Each day must have a clear focus area and 2-5 actionable tasks.
+- Tasks must be specific, measurable, and time-bounded (not generic study topics).
+- Use realistic durations in minutes (30-120 per task).
+- Prioritize missing skills and disqualifiers before polish and behavioral prep.
+- The last day must always be revision + mock interview simulation.
+- Include a short, curated list of resources relevant to this specific company/role.
+- Return ONLY valid JSON, no markdown or explanations.

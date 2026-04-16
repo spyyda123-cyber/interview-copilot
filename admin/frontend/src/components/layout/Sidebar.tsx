@@ -7,7 +7,6 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: "DB" },
-  { href: "/students", label: "Students", icon: "US" },
   { href: "/student-db", label: "Student DB", icon: "SD" },
   { href: "/companies", label: "Companies", icon: "CP" },
   { href: "/approvals", label: "Approvals", icon: "AP" },

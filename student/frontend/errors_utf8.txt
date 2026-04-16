@@ -1,0 +1,4 @@
+﻿app/study-plan/page.tsx(335,5): error TS1005: ')' expected.
+app/study-plan/page.tsx(336,3): error TS1109: Expression expected.
+app/study-plan/page.tsx(460,5): error TS1005: ')' expected.
+app/study-plan/page.tsx(461,3): error TS1109: Expression expected.

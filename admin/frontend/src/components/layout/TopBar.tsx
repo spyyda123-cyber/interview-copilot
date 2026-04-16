@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const titleMap: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/students": "Students",
   "/student-db": "Student DB",
   "/companies": "Companies",
   "/approvals": "Approvals",
