@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Interview Copilot - Centralized Management System
 
-## Getting Started
+Interview Copilot is a multi-service platform designed to streamline interview preparation and placement management. It consists of three primary user flows, each with its own frontend and backend, powered by a shared logic and data layer.
 
-First, run the development server:
+## Project Structure
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+interview-copilot/
+├── shared/             # Shared logic, database models, and authentication
+├── student/            # Student Flow (Backend & Frontend)
+├── admin/              # College Admin Flow (Backend & Frontend)
+├── super-admin/        # Platform Super Admin Flow (Backend & Frontend)
+└── src/app/status      # Diagnostics Dashboard (Root Next.js App)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Prerequisites
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Python 3.11+**
+- **Node.js 20+** (npm or pnpm)
+- **PostgreSQL** with `pgvector` extension
+- **Redis** (for session management and task queuing)
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Setup Instructions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. Environment Configuration
+Copy the shared environment template and fill in your credentials:
+```bash
+cp shared/.env.example .env
+```
+Main variables to configure:
+- `DATABASE_URL`: Your PostgreSQL connection string.
+- `REDIS_URL`: Your Redis connection string.
+- `GEMINI_API_KEY` / `OPENAI_API_KEY`: API keys for AI evaluation.
+- `JWT_SECRET_KEY`: A strong secret for authentication tokens.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Backend Setup (Python)
+You must set up the `shared` library first, as all local backends depend on it.
 
-## Deploy on Vercel
+#### Shared Library
+```bash
+cd shared
+pip install -r requirements.txt
+pip install -e .
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### Local Backends
+Repeat these steps for each backend (`student/backend`, `admin/backend`, `super-admin/backend`):
+```bash
+cd <component>/backend
+python -m venv .venv
+# Activate venv:
+# Windows: .\.venv\Scripts\activate
+# Linux/Mac: source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3. Frontend Setup (Next.js)
+Repeat these steps for each frontend (`student/frontend`, `admin/frontend`, `super-admin/frontend`, and the root folder for diagnostics):
+```bash
+cd <component>/frontend
+npm install
+```
+
+---
+
+## 🏃 Running the Project
+
+### Database Initialization
+Run the initialization scripts from the `shared` directory or root:
+```bash
+# Initialize student/placement DB schemas
+python shared/create_student_db.py
+python shared/create_placement_db.py
+
+# Seed Super Admin
+python shared/seed_super_admin.py
+```
+
+### Starting Services
+For development, you need to run the backends and frontends separately.
+
+#### Backends
+- **Student API**: `uvicorn app.main:app --port 8010 --reload` (in `student/backend`)
+- **Admin API**: `uvicorn app.main:app --port 8020 --reload` (in `admin/backend`)
+- **Super Admin API**: `uvicorn app.main:app --port 8030 --reload` (in `super-admin/backend`)
+- **Worker**: `celery -A app.worker worker --loglevel=info` (in `student/backend`)
+
+#### Frontends
+- **Diagnostics Dashboard**: `npm run dev` (Root) -> http://localhost:3000
+- **Student Dashboard**: `npm run dev` (in `student/frontend`) -> http://localhost:3000 (standard)
+- **Admin Console**: `npm run dev` (in `admin/frontend`) -> http://localhost:3001
+- **Super Admin**: `npm run dev` (in `super-admin/frontend`) -> http://localhost:3002
+
+---
+
+## 🛠 Features
+
+- **Multi-Tenant Architecture**: Separate interfaces for Students, College Admins, and Super Admins.
+- **AI-Powered Evaluation**: Integration with Gemini and OpenAI for resume parsing and mock interviews.
+- **Real-time Monitoring**: Built-in diagnostics page to check service health.
+- **Shared Auth Logic**: Consistent security protocols across all micro-services.
+
+---
+
+Made with ❤️ by the Interview Copilot Team
