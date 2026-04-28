@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import os
@@ -12,7 +12,7 @@ from shared.auth.passwords import hash_password
 from shared.db.base import Base
 from shared.db.session import SessionLocal, engine
 from shared import models  # noqa: F401
-from shared.models.admin_models import College, CollegeStatus, PlanType, User, UserRole, UserStatus
+from shared.models.admin_models import College, CollegeStatus, User, UserRole, UserStatus
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,7 +32,6 @@ def ensure_platform_college(db: Session, college_name: str) -> College:
     college = College(
         name=college_name,
         city=None,
-        plan_type=PlanType.CAMPUS,
         status=CollegeStatus.ACTIVE,
     )
     db.add(college)

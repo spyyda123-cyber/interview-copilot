@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "storage/resumes"
     KNOWLEDGE_DIR: str = "storage/knowledge"
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # AWS S3 Storage
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_S3_BUCKET_NAME: str = "interview-copilot-files"
+    AWS_S3_REGION: str = "ap-south-1"
+    USE_S3_STORAGE: bool = False
     ADMIN_SECRET_KEY: str = ""
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"

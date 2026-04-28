@@ -66,6 +66,14 @@ const ONBOARDING_NAV_ITEMS = [
     section: "PREPARATION",
     items: [
       {
+        label: "Dashboard",
+        href: "/dashboard",
+        icon: (
+          <div className="flex items-center justify-center w-[18px] h-[18px] bg-[#2E3C4D] text-[#818cf8] font-bold text-[9px] rounded-sm">DB</div>
+        ),
+        color: "#818cf8",
+      },
+      {
         label: "Profile",
         href: "/onboarding",
         icon: (
@@ -149,7 +157,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {(pathname.startsWith("/onboarding") || pathname.startsWith("/target") || pathname.startsWith("/interviews") || pathname.startsWith("/study-plan") || pathname.startsWith("/resume")) ? (
+        {(pathname.startsWith("/onboarding") || pathname.startsWith("/target") || pathname.startsWith("/interviews") || pathname.startsWith("/study-plan") || pathname.startsWith("/resume") || pathname.startsWith("/dashboard")) ? (
           ONBOARDING_NAV_ITEMS.map((section) => (
             <div key={section.section}>
               <p className="sidebar-section-label tracking-widest text-[10px] text-slate-500 font-bold mb-4">{section.section}</p>

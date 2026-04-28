@@ -142,6 +142,7 @@ interface CodingMock {
   template?: string;
   languageId?: number;
   testCases: { input: string; expected: string; label?: string }[];
+  hint?: string;
 }
 
 interface Section {
@@ -193,6 +194,7 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
           question: "Two Sum",
           difficulty: "Easy",
           description: "Given an array of integers `nums` and an integer `target`, return **indices** of the two numbers such that they add up to target.\n\nYou may assume that each input would have **exactly one solution**, and you may not use the same element twice.\n\nYou can return the answer in any order.",
+          hint: "Consider using a hash map (dictionary) to store the values you've seen and their indices. For each number, check if (target - current number) exists in the map.",
           examples: [
             { input: "nums = [2,7,11,15], target = 9", output: "[0, 1]", explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]." },
             { input: "nums = [3,2,4], target = 6", output: "[1, 2]" },
@@ -244,6 +246,7 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
           question: "Fibonacci Number",
           difficulty: "Easy",
           description: "Write a function `fibonacci` that returns the Nth Fibonacci number. Assume N is a non-negative integer.\n\n**Definition:** fib(0) = 0, fib(1) = 1, fib(n) = fib(n-1) + fib(n-2) for n > 1.",
+          hint: "Use either recursion with memoization or an iterative approach. For better performance with large N values, avoid pure recursion and use dynamic programming.",
           examples: [
             { input: "n = 4", output: "3", explanation: "fib(4) = fib(3)+fib(2) = 2+1 = 3" },
             { input: "n = 10", output: "55" },
@@ -1101,23 +1104,51 @@ function CodingSlide({ mock, idx, total, onNext, onPrev, isFirst, isLast, hasQui
 
              {reportData.lagging_skills.length > 0 && (
                  <>
-                     <h3 style={{color: '#e2e8f0', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8}}>
+                     <h3 style={{color: '#e2e8f0', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8}}>
                         <IconPanelLeft size={14} color="#e2e8f0"/> Study Priority Queue
                      </h3>
+                     <p style={{color: '#6b7280', fontSize: 11, marginBottom: 14}}>Topics you struggled with — click to go directly to that section in your course plan.</p>
                      <div style={{border: '1px solid #1e2535', borderRadius: 6, overflow: 'hidden', marginBottom: 40}}>
                          {reportData.lagging_skills.map((skill: any, idx: number) => (
-                             <div key={idx} style={{display: 'flex', background: idx % 2 === 0 ? '#1e1e2e' : '#161b27', borderBottom: idx < reportData.lagging_skills.length - 1 ? '1px solid #1e2535' : 'none'}}>
-                                 <div style={{padding: '16px 20px', background: '#312e81', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 60, flexShrink: 0}}>
-                                     <span style={{color: '#fff', fontSize: 18, fontWeight: 800}}>{idx + 1}</span>
+                             <div key={idx} style={{display: 'flex', background: idx % 2 === 0 ? '#1e1e2e' : '#161b27', borderBottom: idx < reportData.lagging_skills.length - 1 ? '1px solid #1e2535' : 'none', alignItems: 'stretch'}}>
+                                 {/* Priority number */}
+                                 <div style={{padding: '14px 16px', background: idx === 0 ? '#312e81' : '#1a1f2e', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 52, flexShrink: 0, borderRight: '1px solid #1e2535'}}>
+                                     <span style={{color: idx === 0 ? '#fff' : '#6b7280', fontSize: 16, fontWeight: 800}}>{idx + 1}</span>
                                  </div>
-                                 <div style={{padding: '16px 20px', flex: 1, display: 'flex', alignItems: 'center'}}>
-                                     <span style={{color: '#d1d5db', fontSize: 14}}>
-                                        Needs Review <span style={{color: '#6b7280', margin: '0 8px'}}>→</span> Priority Concept (<span style={{color: '#f87171', borderBottom: '1px solid #f87171'}}>{skill.skill}</span>)
-                                     </span>
+                                 {/* Skill info */}
+                                 <div style={{padding: '12px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center'}}>
+                                     <div style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+                                         <span style={{color: idx === 0 ? '#f87171' : '#9ca3af', fontSize: 13, fontWeight: 700}}>{skill.skill}</span>
+                                         {skill.course_topic && (
+                                             <span style={{fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(124,116,212,0.18)', color: '#a78bfa', fontWeight: 600, border: '1px solid rgba(124,116,212,0.25)'}}>
+                                                 DSA › {skill.course_topic}
+                                             </span>
+                                         )}
+                                     </div>
+                                     <span style={{color: '#6b7280', fontSize: 11, lineHeight: 1.45}}>{skill.explanation}</span>
                                  </div>
-                                 <div style={{padding: '16px 20px', display: 'flex', alignItems: 'center', borderLeft: '1px solid #1e2535', background: idx === 0 ? '#1e1b4b' : 'transparent'}}>
-                                     <button onClick={() => { onClose?.(); onGoToConcept?.(skill.skill); }} style={{background: 'transparent', border: 'none', color: idx === 0 ? '#818cf8' : '#4b5563', fontSize: 13, fontWeight: idx === 0 ? 700 : 500, cursor: 'pointer', padding: 0}}>
-                                       {idx === 0 ? 'Start Here' : 'Queued'}
+                                 {/* Redirect button */}
+                                 <div style={{padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', borderLeft: '1px solid #1e2535', flexShrink: 0, minWidth: 150}}>
+                                     <button
+                                         onClick={() => {
+                                             const target = skill.course_topic || skill.skill;
+                                                        onGoToConcept?.(target);
+                                         }}
+                                         style={{
+                                             display: 'flex', alignItems: 'center', gap: 6,
+                                             background: idx === 0 ? 'linear-gradient(135deg, #4338ca, #7c3aed)' : '#1e2535',
+                                             border: idx === 0 ? '1px solid #6366f1' : '1px solid #2a3042',
+                                             color: idx === 0 ? '#e0e7ff' : '#6b7280',
+                                             fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                             padding: '6px 12px', borderRadius: 6,
+                                             whiteSpace: 'nowrap', transition: 'all 0.15s',
+                                         }}
+                                         title={`Go to ${skill.course_topic || skill.skill} in the course plan`}
+                                     >
+                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                             <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+                                         </svg>
+                                         {idx === 0 ? 'Review in Course Plan →' : 'Go to Topic'}
                                      </button>
                                  </div>
                              </div>
@@ -1199,6 +1230,14 @@ function CodingSlide({ mock, idx, total, onNext, onPrev, isFirst, isLast, hasQui
                   ))}
                 </ul>
               </div>
+              {mock.hint && (
+                <div style={{ marginTop: 16, padding: "12px 14px", background: "#16472b", borderRadius: 8, border: "1px solid #166534" }}>
+                  <p style={{ color: "#86efac", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                    <IconLightbulb size={12} color="#86efac" /> Hint
+                  </p>
+                  <p style={{ color: "#d1fae5", fontSize: 12, lineHeight: 1.6, margin: 0 }}>{mock.hint}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1270,10 +1309,10 @@ function CodingSlide({ mock, idx, total, onNext, onPrev, isFirst, isLast, hasQui
                       </div>
                       {!r.passed && (
                         <div style={{ fontSize: 11, fontFamily: "monospace" }}>
-                          {r.compileOutput && <div style={{ color: "#f87171", whiteSpace: "pre-wrap", marginBottom: 4 }}><strong>Compile Error:</strong>{"\n"}{r.compileOutput}</div>}
-                          {r.stdout && <div style={{ marginBottom: 3 }}><span style={{ color: "#6b7280" }}>Got: </span><span style={{ color: "#fca5a5" }}>{r.stdout.trim()}</span></div>}
-                          {r.stderr && !r.compileOutput && <div style={{ color: "#f87171", whiteSpace: "pre-wrap" }}>{r.stderr.slice(0, 200)}</div>}
                           <div><span style={{ color: "#6b7280" }}>Expected: </span><span style={{ color: "#86efac" }}>{r.expected}</span></div>
+                          {r.stdout && <div style={{ marginTop: 3 }}><span style={{ color: "#6b7280" }}>Got: </span><span style={{ color: "#fca5a5" }}>{r.stdout.trim()}</span></div>}
+                          {r.compileOutput && <div style={{ color: "#f87171", whiteSpace: "pre-wrap", marginTop: 6 }}><strong>Compile Error:</strong>{"\n"}{r.compileOutput}</div>}
+                          {r.stderr && !r.compileOutput && <div style={{ color: "#f87171", whiteSpace: "pre-wrap", marginTop: 6 }}>{r.stderr.slice(0, 200)}</div>}
                         </div>
                       )}
                     </div>
@@ -1321,30 +1360,55 @@ function CodingSlide({ mock, idx, total, onNext, onPrev, isFirst, isLast, hasQui
                             
                             const sc = sectionConcepts.join(" ").toLowerCase();
 
+                            // Helper: map a skill keyword to the exact DSA course section title
+                            const mapSkillToCourseTopic = (skillName: string): string => {
+                              const s = skillName.toLowerCase();
+                              if (s.includes("time") || s.includes("complexity") || s.includes("big o")) return "Time & Space Complexity";
+                              if (s.includes("space") || s.includes("memory")) return "Time & Space Complexity";
+                              if (s.includes("array") || s.includes("string") || s.includes("two sum") || s.includes("hash map") || s.includes("two pointer") || s.includes("kadane") || s.includes("subarray")) return "Arrays & Strings";
+                              if (s.includes("tree") || s.includes("graph") || s.includes("bfs") || s.includes("dfs") || s.includes("traversal") || s.includes("bst")) return "Trees & Graphs";
+                              if (s.includes("dp") || s.includes("dynamic") || s.includes("knapsack") || s.includes("fibonacci") || s.includes("memoization")) return "Dynamic Programming";
+                              if (s.includes("exception") || s.includes("error") || s.includes("runtime") || s.includes("syntax") || s.includes("compile")) return "Arrays & Strings";
+                              // Check sectionConcepts for a match
+                              for (const concept of sectionConcepts) {
+                                const c = concept.toLowerCase();
+                                if (c.includes("array") || c.includes("string") || c.includes("two sum") || c.includes("hash")) return "Arrays & Strings";
+                                if (c.includes("tree") || c.includes("graph") || c.includes("traversal")) return "Trees & Graphs";
+                                if (c.includes("dp") || c.includes("dynamic")) return "Dynamic Programming";
+                                if (c.includes("complexity") || c.includes("time") || c.includes("space") || c.includes("big o")) return "Time & Space Complexity";
+                              }
+                              return "Arrays & Strings";
+                            };
+
                             if (hasCompileError) {
                               analysisChunks.push("Your code has compilation errors, indicating a gap in language syntax.");
-                              lagging_skills.push({ skill: "Language Syntax", explanation: "Compilation errors prevent code from running. Check your types, brackets, and syntax.", in_course: sectionConcepts.length > 0 });
+                              const courseTopic = mapSkillToCourseTopic("syntax");
+                              lagging_skills.push({ skill: "Language Syntax", explanation: "Compilation errors prevent code from running. Check your types, brackets, and syntax.", in_course: sectionConcepts.length > 0, course_topic: courseTopic });
                               weaknesses.push("Syntax or compilation error");
                             }
                             if (hasRuntimeError) {
                               analysisChunks.push("Your code crashed with a Runtime Error.");
-                              lagging_skills.push({ skill: "Exception Handling", explanation: "Runtime errors occur due to unhandled edge cases like null references or index out of bounds.", in_course: sc.includes("exception") || sc.includes("error") });
+                              const courseTopic = mapSkillToCourseTopic("exception");
+                              lagging_skills.push({ skill: "Exception Handling", explanation: "Runtime errors occur due to unhandled edge cases like null references or index out of bounds.", in_course: sc.includes("exception") || sc.includes("error"), course_topic: courseTopic });
                               weaknesses.push("Unhandled runtime exceptions");
                             }
                             if (hasTLE) {
                               analysisChunks.push("Your solution exceeded the time limit (TLE).");
-                              lagging_skills.push({ skill: "Time Complexity", explanation: "Your algorithm is too slow for large inputs. Consider optimizing nested loops.", in_course: sc.includes("time") || sc.includes("complexity") });
+                              const courseTopic = mapSkillToCourseTopic("time complexity");
+                              lagging_skills.push({ skill: "Time Complexity", explanation: "Your algorithm is too slow for large inputs. Consider optimizing with a hash map or two-pointer approach.", in_course: true, course_topic: courseTopic });
                               weaknesses.push("Time Limit Exceeded — inefficient approach (likely O(n²))");
                             }
                             if (hasMLE) {
                               analysisChunks.push("Your solution exceeded the memory limit (MLE).");
-                              lagging_skills.push({ skill: "Space Complexity", explanation: "Your algorithm uses too much memory. Avoid creating large structures.", in_course: sc.includes("space") || sc.includes("complexity") });
+                              const courseTopic = mapSkillToCourseTopic("space complexity");
+                              lagging_skills.push({ skill: "Space Complexity", explanation: "Your algorithm uses too much memory. Avoid creating large intermediate structures.", in_course: true, course_topic: courseTopic });
                               weaknesses.push("Memory limit exceeded due to space issues");
                             }
                             if (hasWrongAnswer) {
                               analysisChunks.push("Your code yields the wrong output for some scenarios.");
                               const logicSkill = sectionConcepts.length > 0 ? sectionConcepts[0] : "Algorithmic Logic";
-                              lagging_skills.push({ skill: logicSkill, explanation: "The core logic does not cover all edge cases or inputs.", in_course: true });
+                              const courseTopic = mapSkillToCourseTopic(logicSkill);
+                              lagging_skills.push({ skill: logicSkill, explanation: "The core logic does not cover all edge cases or inputs. Review the topic in your DSA course plan.", in_course: true, course_topic: courseTopic });
                               weaknesses.push("Edge cases failed on specific inputs");
                             }
                           }
@@ -1468,8 +1532,9 @@ function CodingSlide({ mock, idx, total, onNext, onPrev, isFirst, isLast, hasQui
         <span className="text-[12px] font-semibold" style={{ color: C.muted }}>{idx + 1} / {total}</span>
         {isLast ? (
           <button onClick={hasQuiz ? onGoToQuiz : onCompleteSection}
+            disabled={!hasQuiz && passedCount === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-bold text-white transition-all hover:opacity-90"
-            style={{ background: C.navy }}>
+            style={{ background: !hasQuiz && passedCount === 0 ? "#d1d5db" : C.navy, cursor: !hasQuiz && passedCount === 0 ? "not-allowed" : "pointer", opacity: !hasQuiz && passedCount === 0 ? 0.6 : 1 }}>
             {hasQuiz ? "Take Quiz" : "Complete"} <IconArrowRight size={14} />
           </button>
         ) : (
@@ -1492,10 +1557,11 @@ interface CodingFullPageProps {
   section: Section;
   onClose: () => void;
   onComplete: () => void;
+  onSkip: () => void;
   onGoToConcept?: (concept: string) => void;
 }
 
-function CodingFullPage({ section, onClose, onComplete, onGoToConcept }: CodingFullPageProps) {
+function CodingFullPage({ section, onClose, onComplete, onSkip, onGoToConcept }: CodingFullPageProps) {
   const mocks = section.codingMocks || [];
   const [mockIdx, setMockIdx] = useState(0);
 
@@ -1568,13 +1634,13 @@ function CodingFullPage({ section, onClose, onComplete, onGoToConcept }: CodingF
         {/* Complete button (right side) */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: '#6b7280', fontSize: 11 }}>{mockIdx + 1} of {mocks.length} problem{mocks.length > 1 ? 's' : ''}</span>
-          <button onClick={onComplete}
+          <button onClick={onSkip}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               fontSize: 12, fontWeight: 700, padding: '6px 16px', borderRadius: 8,
-              background: C.green, color: '#fff', border: 'none', cursor: 'pointer',
+              background: '#1e2535', color: '#e2e8f0', border: '1px solid #2a3042', cursor: 'pointer',
             }}>
-            <IconCheckCircle size={13} color="#fff" /> Complete Section
+            Skip Section
           </button>
         </div>
       </div>
@@ -1613,6 +1679,8 @@ export default function StudyPlanPage() {
   const [completedSections, setCompletedSections] = useState<boolean[]>([]);
   const [quizState, setQuizState] = useState<'none' | 'active' | 'submitted'>('none');
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizAnsweredIdx, setQuizAnsweredIdx] = useState<number>(-1); // Track which question is showing feedback
+  const [skippedQuestions, setSkippedQuestions] = useState<Set<number>>(new Set()); // Track skipped questions
   const [moduleComplete, setModuleComplete] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({ 0: true });
@@ -1621,6 +1689,7 @@ export default function StudyPlanPage() {
   // Slide state
   const [slideIdx, setSlideIdx] = useState(0);
   const [slideDirection, setSlideDirection] = useState<"right" | "left">("right");
+  const [quizSlideIdx, setQuizSlideIdx] = useState(0);
 
   // ── NEW: Coding full page overlay state ──────────────────────
   const [codingFullPageSection, setCodingFullPageSection] = useState<Section | null>(null);
@@ -1737,10 +1806,13 @@ export default function StudyPlanPage() {
     
     setQuizState('none');
     setQuizAnswers({});
+    setQuizAnsweredIdx(-1);
+    setSkippedQuestions(new Set());
     setModuleComplete(firstIncomplete === -1 && sections.length > 0);
     setTimeLeft(null);
     setSlideIdx(0);
     setSlideDirection("right");
+    setQuizSlideIdx(0);
     sectionStartRef.current = Date.now();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModuleIdx, selectedPlanId, passedSet]);
@@ -1770,13 +1842,28 @@ export default function StudyPlanPage() {
 
   const handleStartQuiz = () => {
     setQuizAnswers({});
+    setQuizAnsweredIdx(-1);
+    setSkippedQuestions(new Set());
     setQuizState('active');
+    setQuizSlideIdx(0);
     setTimeLeft((currentSection?.quiz?.length || 0) * 60);
   };
 
   const handlePickAnswer = (qIdx: number, optIdx: number) => {
     if (quizState !== 'active') return;
     setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+    setQuizAnsweredIdx(qIdx); // Show feedback immediately for this question
+  };
+
+  const handleSkipQuestion = () => {
+    setSkippedQuestions(prev => new Set([...prev, quizSlideIdx]));
+    // Move to next question or submit if last
+    if (quizSlideIdx < currentQuiz.length - 1) {
+      setQuizSlideIdx(quizSlideIdx + 1);
+      setQuizAnsweredIdx(-1); // Reset feedback state for next question
+    } else {
+      handleSubmitQuiz();
+    }
   };
 
   const handleSubmitQuiz = () => setQuizState('submitted');
@@ -1812,8 +1899,8 @@ export default function StudyPlanPage() {
 
     if (currentSectionIdx < sections.length - 1) {
       setCurrentSectionIdx(currentSectionIdx + 1);
-      setQuizState('none'); setQuizAnswers({}); setTimeLeft(null);
-      setSlideIdx(0); setSlideDirection("right");
+      setQuizState('none'); setQuizAnswers({}); setQuizAnsweredIdx(-1); setSkippedQuestions(new Set()); setTimeLeft(null);
+      setSlideIdx(0); setSlideDirection("right"); setQuizSlideIdx(0);
     } else {
       setModuleComplete(true);
     }
@@ -1822,8 +1909,8 @@ export default function StudyPlanPage() {
   const handleNavSection = (idx: number) => {
     if (idx <= currentSectionIdx || completedSections[idx]) {
       setCurrentSectionIdx(idx);
-      setQuizState('none'); setQuizAnswers({}); setTimeLeft(null);
-      setSlideIdx(0); setSlideDirection("right");
+      setQuizState('none'); setQuizAnswers({}); setQuizAnsweredIdx(-1); setSkippedQuestions(new Set()); setTimeLeft(null);
+      setSlideIdx(0); setSlideDirection("right"); setQuizSlideIdx(0);
     }
   };
 
@@ -1857,6 +1944,17 @@ export default function StudyPlanPage() {
     }
   };
 
+  const handleSkipCoding = () => {
+    setCodingFullPageSection(null);
+    setQuizState('none'); setQuizAnswers({}); setQuizAnsweredIdx(-1); setSkippedQuestions(new Set()); setTimeLeft(null);
+    if (currentSectionIdx < sections.length - 1) {
+      setCurrentSectionIdx(currentSectionIdx + 1);
+      setSlideIdx(0); setSlideDirection("right"); setQuizSlideIdx(0);
+    } else {
+      setSlideIdx(0); setQuizSlideIdx(0);
+    }
+  };
+
   return (
     <>
       {/* ─── CODING FULL PAGE OVERLAY ─── */}
@@ -1865,6 +1963,7 @@ export default function StudyPlanPage() {
           section={codingFullPageSection}
           onClose={handleCloseCoding}
           onComplete={handleCompleteCoding}
+          onSkip={handleSkipCoding}
           onGoToConcept={handleJumpToConcept}
         />
       )}
@@ -2065,17 +2164,19 @@ export default function StudyPlanPage() {
 
                     {/* ── SECTION QUIZ ── */}
                     {(quizState === 'active' || quizState === 'submitted') && (
-                      <div className="h-full overflow-y-auto editorial-scrollbar space-y-4 fade-up pb-4">
+                      <div className="flex flex-col h-full overflow-hidden fade-up gap-3">
                         {/* Quiz header */}
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-xl border px-4 py-3 flex-1 flex justify-between items-center" style={{ borderColor: C.border, background: C.purpleBg }}>
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: C.purple }}>
-                                <IconBook size={16} color="#fff" />
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="rounded-lg border px-5 py-3 flex-1 flex justify-between items-center" style={{ borderColor: C.border, background: quizState === 'submitted' ? (quizPassed ? C.greenLight + "30" : "#fef2f220") : C.purpleBg }}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: quizState === 'submitted' ? (quizPassed ? C.green : "#dc2626") : C.purple }}>
+                                {quizState === 'submitted' ? (quizPassed ? <IconCheck size={18} color="#fff" /> : <span style={{ color: '#fff', fontSize: '16px' }}>✕</span>) : <IconBook size={16} color="#fff" />}
                               </div>
                               <div>
                                 <h3 className="text-[13px] font-bold" style={{ color: C.heading }}>Section Quiz — {currentSection?.title}</h3>
-                                <p className="text-[10px]" style={{ color: C.muted }}>{currentQuiz.length} questions — Need {Math.ceil(currentQuiz.length / 2)}+ correct</p>
+                                <p className="text-[10px]" style={{ color: C.muted }}>
+                                  {quizState === 'submitted' ? `${quizScore} / ${currentQuiz.length} correct` : `${currentQuiz.length} questions — Need ${Math.ceil(currentQuiz.length / 2)}+ correct`}
+                                </p>
                               </div>
                             </div>
                             {quizState === 'active' && timeLeft !== null && (
@@ -2086,7 +2187,7 @@ export default function StudyPlanPage() {
                             )}
                           </div>
                           {quizState === 'active' && (
-                            <button onClick={() => { setQuizState('none'); setSlideIdx(0); }}
+                            <button onClick={() => { setQuizState('none'); setSlideIdx(0); setQuizSlideIdx(0); setQuizAnswers({}); setQuizAnsweredIdx(-1); setSkippedQuestions(new Set()); }}
                               className="px-3 py-2 rounded-lg border text-[11px] font-semibold transition-all hover:shadow-sm"
                               style={{ borderColor: C.border, color: C.muted, background: C.card }}>
                               <IconArrowLeft size={12} /> Back
@@ -2096,54 +2197,99 @@ export default function StudyPlanPage() {
 
                         {/* Score banner */}
                         {quizState === 'submitted' && (
-                          <div className="rounded-xl border p-4 text-center"
-                            style={{ borderColor: quizPassed ? C.green : "#fca5a5", background: quizPassed ? C.greenLight : "#fef2f2" }}>
-                            <p className="text-2xl font-bold mb-1" style={{ color: quizPassed ? C.green : "#dc2626" }}>{quizScore} / {currentQuiz.length}</p>
-                            <p className="text-[13px] font-semibold mb-3" style={{ color: quizPassed ? C.green : "#dc2626" }}>
-                              {quizPassed ? (quizScore === currentQuiz.length ? "Perfect! All correct!" : "Passed! Great work!") : "Not passed — review answers below and retry"}
-                            </p>
+                          <div className="rounded-lg border px-4 py-2 flex items-center justify-between shrink-0" style={{ borderColor: quizPassed ? C.green : "#fca5a5", background: quizPassed ? C.greenLight + "20" : "#fef2f210" }}>
+                            <div className="flex items-center gap-3">
+                              <div style={{ width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: quizPassed ? C.green : "#dc2626", color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>
+                                {quizPassed ? '✓' : '✕'}
+                              </div>
+                              <div>
+                                <p className="text-lg font-bold leading-none" style={{ color: quizPassed ? C.green : "#dc2626" }}>{quizScore} / {currentQuiz.length}</p>
+                                <p className="text-[11px] font-medium mt-1" style={{ color: quizPassed ? C.green : "#dc2626" }}>
+                                  {quizPassed ? (quizScore === currentQuiz.length ? "Perfect! All correct!" : "Passed! Great work!") : "Not passed — review answers below and retry"}
+                                </p>
+                              </div>
+                            </div>
                             {quizPassed && (
                               <button onClick={handleProceed}
-                                className="px-6 py-2.5 rounded-lg font-bold text-[13px] text-white transition-all hover:opacity-90"
+                                className="px-4 py-1.5 rounded-lg font-bold text-[11px] text-white transition-all hover:opacity-90 inline-flex items-center gap-1.5"
                                 style={{ background: C.navy }}>
-                                {currentSectionIdx < sections.length - 1 ? "Next Section" : "Complete Module"} <IconArrowRight size={14} />
+                                {currentSectionIdx < sections.length - 1 ? "Next Section" : "Complete Module"} <IconArrowRight size={12} />
                               </button>
                             )}
                           </div>
                         )}
 
                         {/* Questions */}
-                        <div className="space-y-3">
+                        <div className="flex-1 min-h-0 overflow-y-auto editorial-scrollbar pr-2 flex flex-col">
                           {currentQuiz.map((qz, qIdx) => {
+                            if (qIdx !== quizSlideIdx && quizState !== 'submitted') return null;
+                            if (quizState === 'submitted' && qIdx !== quizSlideIdx) return null;
                             const ua = quizAnswers[qIdx];
+                            const hasExplanation = quizAnsweredIdx === qIdx && ua !== undefined;
+                            
                             return (
-                              <div key={qIdx} className="rounded-xl border overflow-hidden"
+                              <div key={qIdx} className="rounded-xl border flex flex-col flex-1 overflow-hidden"
                                 style={{ borderColor: quizState === 'submitted' ? ua === qz.correctIndex ? C.green : "#fca5a5" : C.border, background: C.card }}>
-                                <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: C.border }}>
-                                  <span className="flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold shrink-0" style={{ background: C.purpleBg, color: C.purple }}>{qIdx + 1}</span>
-                                  <p className="text-[13px] font-semibold" style={{ color: C.heading, fontFamily: "var(--font-playfair), serif" }}>{qz.question}</p>
+                                
+                                {/* Question Header */}
+                                <div className="px-4 py-3 border-b flex items-start gap-3 shrink-0" style={{ borderColor: C.border, background: quizState === 'submitted' ? ua === qz.correctIndex ? C.greenLight + "15" : "#fef2f215" : C.card }}>
+                                  <span className="flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold shrink-0" style={{ background: quizState === 'submitted' ? ua === qz.correctIndex ? C.green : "#dc2626" : C.purpleBg, color: quizState === 'submitted' ? "#fff" : C.purple }}>{qIdx + 1}</span>
+                                  <p className="text-[14px] font-semibold leading-relaxed" style={{ color: C.heading, fontFamily: "var(--font-playfair), serif" }}>{qz.question}</p>
                                 </div>
-                                <div className="p-3 space-y-2">
+                                
+                                {/* Options Container */}
+                                <div className="px-4 py-3 flex-1 flex flex-col justify-start gap-2">
                                   {qz.options.map((opt, optIdx) => {
-                                    const isCorrectOpt = quizState === 'submitted' && optIdx === qz.correctIndex;
-                                    const isWrongOpt = quizState === 'submitted' && ua === optIdx && optIdx !== qz.correctIndex;
+                                    const isAnswered = ua !== undefined;
+                                    const isCorrectOpt = ua === qz.correctIndex;
+                                    const isSelectedOpt = ua === optIdx;
+                                    const isWrongSelected = isAnswered && isSelectedOpt && !isCorrectOpt;
+                                    const showCorrect = isAnswered && optIdx === qz.correctIndex;
+                                    
+                                    let bgColor = C.surface;
+                                    let borderColor = C.border;
+                                    let textColor = C.body;
+                                    let boxShadow = "none";
+                                    
+                                    if (showCorrect) {
+                                      bgColor = C.greenLight;
+                                      borderColor = C.green;
+                                      textColor = C.green;
+                                      boxShadow = `0 0 0 3px ${C.greenLight}40`;
+                                    } else if (isWrongSelected) {
+                                      bgColor = "#fef2f2";
+                                      borderColor = "#fca5a5";
+                                      textColor = "#dc2626";
+                                      boxShadow = `0 0 0 3px #fca5a540`;
+                                    } else if (isSelectedOpt && !isAnswered) {
+                                      bgColor = C.purpleBg;
+                                      borderColor = C.purple;
+                                      boxShadow = `0 0 0 3px ${C.purple}20`;
+                                    }
+                                    
                                     return (
-                                      <button key={optIdx} onClick={() => handlePickAnswer(qIdx, optIdx)} disabled={quizState === 'submitted'}
-                                        className="w-full text-left px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all border"
-                                        style={{ background: isCorrectOpt ? C.greenLight : isWrongOpt ? "#fef2f2" : ua === optIdx && quizState === 'active' ? C.purpleBg : C.surface, borderColor: isCorrectOpt ? C.green : isWrongOpt ? "#fca5a5" : ua === optIdx && quizState === 'active' ? C.purple : C.border, color: isCorrectOpt ? C.green : isWrongOpt ? "#dc2626" : C.body }}>
-                                        <span className="font-bold mr-2">{String.fromCharCode(65 + optIdx)}.</span>
-                                        {opt}
-                                        {isCorrectOpt && <span className="float-right"><IconCheck size={14} color={C.green} /></span>}
+                                      <button key={optIdx} onClick={() => handlePickAnswer(qIdx, optIdx)} disabled={isAnswered}
+                                        className="w-full text-left px-4 py-3 rounded-lg text-[13px] font-medium transition-all border-2"
+                                        style={{ background: bgColor, borderColor: borderColor, color: textColor, cursor: isAnswered ? 'not-allowed' : 'pointer', opacity: isAnswered ? 1 : 1, boxShadow: showCorrect || isWrongSelected ? boxShadow : "none" }}>
+                                        <div className="flex items-center justify-between">
+                                          <span><span className="font-bold" style={{ opacity: 0.8 }}>{String.fromCharCode(65 + optIdx)}.</span> {opt}</span>
+                                          {showCorrect && <span><IconCheck size={16} color={C.green} /></span>}
+                                          {isWrongSelected && <span style={{ fontSize: 16, color: "#dc2626" }}>✕</span>}
+                                        </div>
                                       </button>
                                     );
                                   })}
                                 </div>
-                                {quizState === 'submitted' && (
-                                  <div className="px-4 pb-3">
-                                    <div className="rounded-lg px-4 py-2.5 border" style={{ borderColor: C.border, background: C.surface }}>
-                                      <div className="flex items-center gap-1.5 mb-1">
-                                        <IconLightbulb size={12} color={C.purple} />
-                                        <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: C.purple }}>Explanation</p>
+                                
+                                {/* Explanation Box - Display in Active (on feedback) */}
+                                {hasExplanation && quizState !== 'submitted' && ua !== undefined && (
+                                  <div className="px-4 py-2 border-t shrink-0" style={{ borderColor: C.border, background: ua === qz.correctIndex ? C.greenLight + "10" : "#fef2f210" }}>
+                                    <div className="rounded-lg px-4 py-3 border-l-4" style={{ borderLeftColor: ua === qz.correctIndex ? C.green : "#dc2626", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.03)" }}>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <IconLightbulb size={14} color={ua === qz.correctIndex ? C.green : "#dc2626"} />
+                                        <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: ua === qz.correctIndex ? C.green : "#dc2626" }}>
+                                          {ua === qz.correctIndex ? '✓ Correct!' : '✕ Incorrect'}
+                                        </p>
                                       </div>
                                       <p className="text-[12px] leading-relaxed" style={{ color: C.body }}>{qz.explanation}</p>
                                     </div>
@@ -2155,29 +2301,87 @@ export default function StudyPlanPage() {
                         </div>
 
                         {/* Action buttons */}
-                        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: C.border }}>
-                          {quizState === 'active' ? (
+                        <div className="flex items-center justify-between pt-3 border-t shrink-0 gap-2" style={{ borderColor: C.border, padding: '12px 0 0 0' }}>
+                          {quizState === 'active' && (
                             <>
-                              <p className="text-[11px]" style={{ color: C.muted }}>{Object.keys(quizAnswers).length}/{currentQuiz.length} answered</p>
-                              <button onClick={handleSubmitQuiz} disabled={Object.keys(quizAnswers).length < currentQuiz.length}
-                                className="px-6 py-2.5 rounded-lg font-bold text-[13px] transition-all"
-                                style={{ background: Object.keys(quizAnswers).length === currentQuiz.length ? C.navy : "#F3F4F6", color: Object.keys(quizAnswers).length === currentQuiz.length ? "#fff" : "#D1D5DB", cursor: Object.keys(quizAnswers).length === currentQuiz.length ? "pointer" : "not-allowed" }}>
-                                Submit Quiz
+                              <button onClick={() => setQuizSlideIdx(Math.max(0, quizSlideIdx - 1))} disabled={quizSlideIdx === 0}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all"
+                                style={{ background: quizSlideIdx === 0 ? "#F3F4F6" : C.card, color: quizSlideIdx === 0 ? "#D1D5DB" : C.navy, border: `1px solid ${quizSlideIdx === 0 ? "#E5E7EB" : C.border}`, opacity: quizSlideIdx === 0 ? 0.6 : 1, cursor: quizSlideIdx === 0 ? "not-allowed" : "pointer" }}>
+                                <IconArrowLeft size={12} /> Back
                               </button>
-                            </>
-                          ) : (
-                            <>
-                              {!quizPassed && (
-                                <button onClick={() => { setQuizAnswers({}); setQuizState('active'); }}
-                                  className="px-5 py-2.5 rounded-lg border font-bold text-[13px] transition-all hover:shadow-sm"
-                                  style={{ borderColor: C.border, color: C.heading, background: C.card }}>
-                                  Retry Quiz
+
+                              <div className="flex-1" />
+
+                              {/* Skip button - always available during quiz */}
+                              <button onClick={handleSkipQuestion}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all border"
+                                style={{ background: "#F3F4F6", color: "#6B7280", borderColor: "#E5E7EB" }}>
+                                ↷ Skip
+                              </button>
+
+                              {quizSlideIdx < currentQuiz.length - 1 ? (
+                                <button 
+                                  onClick={() => {
+                                    setQuizSlideIdx(quizSlideIdx + 1);
+                                    setQuizAnsweredIdx(-1);
+                                  }}
+                                  disabled={quizAnswers[quizSlideIdx] === undefined && !skippedQuestions.has(quizSlideIdx)}
+                                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-semibold transition-all"
+                                  style={{ 
+                                    background: (quizAnswers[quizSlideIdx] !== undefined || skippedQuestions.has(quizSlideIdx)) ? C.navy : "#F3F4F6", 
+                                    color: (quizAnswers[quizSlideIdx] !== undefined || skippedQuestions.has(quizSlideIdx)) ? "#fff" : "#D1D5DB", 
+                                    border: `1px solid ${(quizAnswers[quizSlideIdx] !== undefined || skippedQuestions.has(quizSlideIdx)) ? C.navy : "#E5E7EB"}`,
+                                    cursor: (quizAnswers[quizSlideIdx] !== undefined || skippedQuestions.has(quizSlideIdx)) ? 'pointer' : 'not-allowed'
+                                  }}>
+                                  Next <IconArrowRight size={12} />
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={handleSubmitQuiz}
+                                  disabled={Object.keys(quizAnswers).length + skippedQuestions.size < currentQuiz.length}
+                                  className="px-5 py-2 rounded-lg font-bold text-[11px] transition-all"
+                                  style={{ 
+                                    background: (Object.keys(quizAnswers).length + skippedQuestions.size === currentQuiz.length) ? C.navy : "#F3F4F6", 
+                                    color: (Object.keys(quizAnswers).length + skippedQuestions.size === currentQuiz.length) ? "#fff" : "#D1D5DB", 
+                                    cursor: (Object.keys(quizAnswers).length + skippedQuestions.size === currentQuiz.length) ? 'pointer' : 'not-allowed',
+                                    border: `1px solid ${(Object.keys(quizAnswers).length + skippedQuestions.size === currentQuiz.length) ? C.navy : "#E5E7EB"}`
+                                  }}>
+                                  Submit
                                 </button>
                               )}
-                              {quizPassed && (
-                                <p className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: C.green }}>
-                                  <IconCheckCircle size={14} /> Quiz passed! Click "Next Section" above.
-                                </p>
+                            </>
+                          )}
+
+                          {quizState === 'submitted' && (
+                            <>
+                              <button onClick={() => setQuizSlideIdx(Math.max(0, quizSlideIdx - 1))} disabled={quizSlideIdx === 0}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all"
+                                style={{ background: quizSlideIdx === 0 ? "#F3F4F6" : C.card, color: quizSlideIdx === 0 ? "#D1D5DB" : C.navy, border: `1px solid ${quizSlideIdx === 0 ? "#E5E7EB" : C.border}`, opacity: quizSlideIdx === 0 ? 0.6 : 1, cursor: quizSlideIdx === 0 ? "not-allowed" : "pointer" }}>
+                                <IconArrowLeft size={12} /> Back
+                              </button>
+
+                              <div className="flex-1" />
+
+                              {quizSlideIdx < currentQuiz.length - 1 ? (
+                                <button onClick={() => setQuizSlideIdx(quizSlideIdx + 1)}
+                                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-semibold transition-all"
+                                  style={{ background: C.card, color: C.navy, border: `1px solid ${C.border}` }}>
+                                  Next <IconArrowRight size={12} />
+                                </button>
+                              ) : (
+                                !quizPassed ? (
+                                  <button onClick={() => { setQuizAnswers({}); setSkippedQuestions(new Set()); setQuizAnsweredIdx(-1); setQuizState('active'); setQuizSlideIdx(0); }}
+                                    className="px-4 py-2 rounded-lg border font-bold text-[11px] transition-all hover:shadow-sm"
+                                    style={{ borderColor: C.border, color: C.heading, background: C.card }}>
+                                    Retry
+                                  </button>
+                                ) : (
+                                  <button onClick={handleProceed}
+                                    className="flex items-center gap-1.5 px-5 py-2 rounded-lg font-bold text-[11px] text-white transition-all hover:opacity-90"
+                                    style={{ background: C.navy }}>
+                                    {currentSectionIdx < sections.length - 1 ? "Next" : "Done"} <IconArrowRight size={12} />
+                                  </button>
+                                )
                               )}
                             </>
                           )}

@@ -88,6 +88,7 @@ const PROTECTED_ROUTES = [
   "/plan",
   "/interviews",
   "/study-plan",
+  "/dashboard",
 ];
 
 type ActivationGuardProps = {

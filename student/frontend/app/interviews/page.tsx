@@ -2,6 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import FeedbackModal from "../components/FeedbackModal";
+import {
+  getFeedbackByCompany,
+  type PendingFeedbackItem,
+  type FeedbackResponse,
+} from "@/src/lib/api";
 
 const PROFICIENCY_OPTIONS = ["Beginner", "Intermediate", "Advanced"];
 const COMMON_SKILLS = ["Java", "Python", "SQL", "REST APIs", "React", "Node.js", "C++", "AWS"];
@@ -15,6 +21,7 @@ const APPROVED_INTERVIEWS = [
     shortDetails: "Mar 25 · 3.5-7 LPA",
     logoText: "T",
     logoColor: "bg-[#1e3a8a]",
+    interviewDate: "2026-03-25",
   },
   {
     id: 2,
@@ -24,6 +31,7 @@ const APPROVED_INTERVIEWS = [
     shortDetails: "Apr 2 · 12-18 LPA",
     logoText: "G",
     logoColor: "bg-[#ea4335]",
+    interviewDate: "2026-04-02",
   },
   {
     id: 3,
@@ -33,6 +41,7 @@ const APPROVED_INTERVIEWS = [
     shortDetails: "Apr 10 · 3.6-5 LPA",
     logoText: "I",
     logoColor: "bg-[#0ea5e9]",
+    interviewDate: "2026-04-10",
   },
 ];
 
@@ -53,6 +62,9 @@ export default function InterviewsPage() {
   const [skills, setSkills] = useState<{skill: string, proficiency: string}[]>([]);
   const [currentSkill, setCurrentSkill] = useState("");
   const [currentProficiency, setCurrentProficiency] = useState(PROFICIENCY_OPTIONS[0]);
+  const [feedbackModal, setFeedbackModal] = useState<{ interview: PendingFeedbackItem } | null>(null);
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, FeedbackResponse[]>>({});
+  const [viewingFeedback, setViewingFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     // When opening page, load skills from session if any exist
@@ -147,7 +159,10 @@ export default function InterviewsPage() {
         <p className="text-sm text-slate-500 mb-4">Activated companies move to Study Plan and disappear from here.</p>
         
         <div className="space-y-3">
-          {APPROVED_INTERVIEWS.map((interview) => (
+          {APPROVED_INTERVIEWS.map((interview) => {
+            const isPast = new Date(interview.interviewDate) < new Date();
+            const hasFeedback = feedbackMap[interview.company]?.length > 0;
+            return (
             <div key={interview.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between transition hover:shadow-md">
               <div className="flex items-center gap-4">
                 <div className={`flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold text-xl ${interview.logoColor}`}>
@@ -160,14 +175,48 @@ export default function InterviewsPage() {
                   <p className="text-xs text-slate-500 font-medium mt-0.5">{interview.shortDetails}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => handleActivateClick(interview)}
-                className="px-6 py-2 rounded-xl text-slate-800 border border-slate-300 font-bold text-sm hover:bg-slate-50 transition"
-              >
-                Activate
-              </button>
+              <div className="flex items-center gap-2">
+                {isPast && (
+                  hasFeedback ? (
+                    <button
+                      onClick={() => setViewingFeedback(viewingFeedback === interview.company ? null : interview.company)}
+                      className="px-4 py-2 rounded-xl text-indigo-700 border border-indigo-200 bg-indigo-50 font-bold text-sm hover:bg-indigo-100 transition flex items-center gap-1.5"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                      </svg>
+                      View Feedback
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setFeedbackModal({
+                        interview: {
+                          company_name: interview.company,
+                          role: interview.role,
+                          interview_date: interview.interviewDate,
+                        },
+                      })}
+                      className="px-4 py-2 rounded-xl text-amber-700 border border-amber-200 bg-amber-50 font-bold text-sm hover:bg-amber-100 transition flex items-center gap-1.5"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                      Give Feedback
+                    </button>
+                  )
+                )}
+                <button 
+                  onClick={() => handleActivateClick(interview)}
+                  className="px-6 py-2 rounded-xl text-slate-800 border border-slate-300 font-bold text-sm hover:bg-slate-50 transition"
+                >
+                  Activate
+                </button>
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -310,6 +359,22 @@ export default function InterviewsPage() {
 
           </div>
         </div>
+      )}
+
+      {/* Feedback Modal */}
+      {feedbackModal && (
+        <FeedbackModal
+          interview={feedbackModal.interview}
+          studentId={Number(sessionStorage.getItem("student_id") || "0")}
+          onClose={() => setFeedbackModal(null)}
+          onSubmitted={(fb) => {
+            setFeedbackModal(null);
+            setFeedbackMap((prev) => ({
+              ...prev,
+              [fb.company_name]: [...(prev[fb.company_name] || []), fb],
+            }));
+          }}
+        />
       )}
 
     </div>

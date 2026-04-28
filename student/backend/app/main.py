@@ -20,10 +20,11 @@ from app.api import (
     target,
     prep,
     scorm,
+    feedback,
 )
 from app.core.config import masked_gemini_key, settings
 from app.db.base import Base
-from app.db.session import engine, init_db
+from app.db.session import create_extension, engine, init_db
 from app import models  # noqa: F401
 from fastapi.middleware.cors import CORSMiddleware
 from app.tasks.celery_app import celery_app
@@ -52,8 +53,9 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     logger.info("[PLAN-TRACE] Gemini key detected: %s", masked_gemini_key())
-    init_db()
+    create_extension()
     Base.metadata.create_all(bind=engine)
+    init_db()
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -87,6 +89,7 @@ app.include_router(company.router)
 app.include_router(knowledge.router)
 app.include_router(system.router)
 app.include_router(scorm.router)
+app.include_router(feedback.router)
 
 
 @app.get("/health")

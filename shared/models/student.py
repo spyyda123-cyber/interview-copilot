@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from shared.models.resume_gap import ResumeGapAnalysis
     from shared.models.student_profile import StudentProfile
     from shared.models.target import TargetInterview
+    from shared.models.marksheet import Marksheet
+    from shared.models.interview_feedback import InterviewFeedback
 
 
 class Student(Base):
@@ -38,6 +40,7 @@ class Student(Base):
         cascade="all, delete-orphan",
     )
     resumes: Mapped[List["Resume"]] = relationship(back_populates="student")
+    marksheets: Mapped[List["Marksheet"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     targets: Mapped[List["TargetInterview"]] = relationship(
         back_populates="student",
         cascade="all, delete-orphan",
@@ -48,4 +51,5 @@ class Student(Base):
     )
     learning_plans: Mapped[List["LearningPlan"]] = relationship(back_populates="student")
     prep_licenses: Mapped[List["PrepLicense"]] = relationship(back_populates="student")
+    feedbacks: Mapped[List["InterviewFeedback"]] = relationship(back_populates="student", cascade="all, delete-orphan")
 

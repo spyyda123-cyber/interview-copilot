@@ -3,6 +3,7 @@ import logging
 
 from dotenv import load_dotenv
 from celery import Celery
+from celery.schedules import crontab
 from kombu import Queue
 
 load_dotenv()
@@ -31,8 +32,19 @@ celery_app.conf.update(
     task_queues=(
         Queue("default"),
         Queue("llm"),
+        Queue("agent"),   # Dedicated queue for agentic feedback tasks
     ),
     task_routes={
-        "app.tasks.jobs.generate_plan_summary": {"queue": "llm"},
-    }
+        "app.tasks.jobs.generate_plan_summary":    {"queue": "llm"},
+        "app.tasks.jobs.analyze_company_feedback": {"queue": "agent"},
+        "app.tasks.jobs.analyze_feedback_batch":   {"queue": "agent"},
+    },
+    # ── Celery Beat: Nightly agentic feedback analysis at 2 AM ──────────
+    beat_schedule={
+        "nightly-feedback-analysis": {
+            "task": "app.tasks.jobs.analyze_feedback_batch",
+            "schedule": crontab(hour=2, minute=0),  # 2:00 AM daily
+        },
+    },
+    timezone="Asia/Kolkata",   # IST — adjust to your timezone
 )

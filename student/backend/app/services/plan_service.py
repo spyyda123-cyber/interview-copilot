@@ -576,6 +576,18 @@ def _get_latest_target(
         query = query.filter(TargetInterview.role == role)
     return query.order_by(TargetInterview.created_at.desc()).first()
 
+def _get_feedback_intelligence(db: Session, company_name: str) -> str:
+    """
+    Fetch pre-built Ollama intelligence snippet from feedback_analysis_cache.
+    Zero extra LLM cost at runtime — reads from DB only.
+    """
+    try:
+        from app.services.feedback_agent_service import get_feedback_intelligence
+        return get_feedback_intelligence(db, company_name)
+    except Exception as exc:
+        logger.warning("[PLAN-AGENT] Could not fetch feedback intelligence for %s: %s", company_name, exc)
+        return "No prior student interview data available for this company yet."
+
 
 def generate_learning_plan(
     db: Session,

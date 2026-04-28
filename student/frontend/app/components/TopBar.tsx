@@ -14,6 +14,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/analysis": { title: "Processing", subtitle: "Analyzing your profile" },
   "/status": { title: "System Status", subtitle: "Backend service health" },
   "/company": { title: "Company Intel", subtitle: "Research on your target" },
+  "/dashboard": { title: "Dashboard", subtitle: "Your interview overview and feedback" },
 };
 
 export default function TopBar() {

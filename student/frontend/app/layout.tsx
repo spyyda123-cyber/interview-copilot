@@ -82,6 +82,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
+        suppressHydrationWarning
         className={`${dmSans.variable} ${inter.variable} ${jetBrainsMono.variable} ${playfairDisplay.variable} antialiased`}
       >
         <ActivationGuard>{children}</ActivationGuard>

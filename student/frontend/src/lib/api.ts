@@ -149,6 +149,7 @@ export type HealthResponse = {
 
 export type AuthResponse = {
   student_id: number;
+  student_name?: string | null;
 };
 
 export type SystemStatusResponse = {
@@ -158,6 +159,46 @@ export type SystemStatusResponse = {
   celery_worker: string;
   openai_key: string;
   details?: Record<string, string>;
+};
+
+// ── Feedback Types ──────────────────────────────────────────────
+export type FeedbackSubmitPayload = {
+  student_id: number;
+  company_name: string;
+  role: string;
+  interview_date: string; // ISO date string (YYYY-MM-DD)
+  experience_rating: string;
+  performance_rating: string;
+  course_relevance: boolean;
+  relevance_score: number;
+  out_of_box_questions?: string | null;
+  additional_notes?: string | null;
+};
+
+export type FeedbackResponse = {
+  id: number;
+  student_id: number;
+  company_name: string;
+  role: string;
+  interview_date: string;
+  experience_rating: string;
+  performance_rating: string;
+  course_relevance: boolean;
+  relevance_score: number;
+  out_of_box_questions?: string | null;
+  additional_notes?: string | null;
+  created_at: string;
+};
+
+export type PendingFeedbackItem = {
+  company_name: string;
+  role: string;
+  interview_date: string;
+};
+
+export type PendingFeedbackResponse = {
+  pending: PendingFeedbackItem[];
+  count: number;
 };
 
 const buildUrl = (path: string) => {
@@ -183,11 +224,13 @@ const apiFetch = async <T>(path: string, options?: RequestInit) => {
 
   let response: Response;
   try {
+    const isFormData = options?.body instanceof FormData;
+    
     response = await fetch(buildUrl(path), {
       ...options,
       signal: controller.signal,
       headers: {
-        Accept: "application/json",
+        ...(isFormData ? {} : { "Accept": "application/json" }),  // Don't set Accept for FormData
         ...(options?.headers ?? {}),
       },
     });
@@ -233,11 +276,19 @@ export const uploadResume = async (
   });
 };
 
-export const uploadMarksheet = async (file: File) => {
+export const uploadMarksheet = async (
+  file: File,
+  metadata?: {
+    studentId?: number;
+  }
+) => {
   const formData = new FormData();
+  if (metadata?.studentId !== undefined) {
+    formData.append("student_id", String(metadata.studentId));
+  }
   formData.append("file", file);
 
-  return apiFetch<{file_path: string, file_name: string}>("/marksheets/upload", {
+  return apiFetch<{id: number, file_path: string, file_name: string, file_type: string, created_at: string}>("/student/marksheets/upload", {
     method: "POST",
     body: formData,
   });
@@ -424,4 +475,28 @@ export const generateCodeReport = async (payload: {
     },
     body: JSON.stringify(payload),
   });
+};
+
+// ── Feedback API Functions ──────────────────────────────────────
+
+export const submitFeedback = async (payload: FeedbackSubmitPayload) => {
+  return apiFetch<FeedbackResponse>("/feedback/submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+};
+
+export const getPendingFeedbacks = async (studentId: number) => {
+  return apiFetch<PendingFeedbackResponse>(`/feedback/pending/${studentId}`);
+};
+
+export const getFeedbackByCompany = async (studentId: number, companyName: string) => {
+  return apiFetch<FeedbackResponse[]>(`/feedback/detail/${studentId}/${encodeURIComponent(companyName)}`);
+};
+
+export const getAllFeedbacks = async (studentId: number) => {
+  return apiFetch<FeedbackResponse[]>(`/feedback/all/${studentId}`);
 };

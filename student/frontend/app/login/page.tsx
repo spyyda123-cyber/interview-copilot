@@ -27,8 +27,11 @@ export default function LoginPage() {
 
       sessionStorage.setItem("student_id", String(response.student_id));
       sessionStorage.setItem("student_email", email.trim());
+      if (response.student_name) {
+        sessionStorage.setItem("student_name", response.student_name);
+      }
 
-      router.push("/onboarding");
+      router.push("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed.";
       setError(message);

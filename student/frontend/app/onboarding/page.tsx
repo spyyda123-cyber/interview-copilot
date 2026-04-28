@@ -24,7 +24,8 @@ interface MarksheetFile {
   id: string;
   name: string;
   size: number;
-  status: "uploading" | "uploaded" | "error";
+  status: "pending" | "uploading" | "uploaded" | "error";
+  fileObj?: File;
   path?: string;
 }
 
@@ -46,8 +47,7 @@ export default function OnboardingPage() {
   const [tone, setTone] = useState(TONE_OPTIONS[0].value);
 
   const [marksheets, setMarksheets] = useState<MarksheetFile[]>([]);
-  const [resumeUploaded, setResumeUploaded] = useState(false);
-  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeFileObj, setResumeFileObj] = useState<File | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,36 +88,18 @@ export default function OnboardingPage() {
       id: Math.random().toString(36).substr(2, 9),
       name: file.name,
       size: file.size,
-      status: "uploading" as const,
+      status: "pending" as const,
       fileObj: file
     }));
     
-    setMarksheets(prev => [...prev, ...newFiles.map(f => ({id: f.id, name: f.name, size: f.size, status: f.status}))]);
-    
-    for (const nf of newFiles) {
-      try {
-        const res = await uploadMarksheet(nf.fileObj);
-        setMarksheets(prev => prev.map(p => p.id === nf.id ? { ...p, status: "uploaded", path: res.file_path } : p));
-      } catch (err) {
-        setMarksheets(prev => prev.map(p => p.id === nf.id ? { ...p, status: "error" } : p));
-      }
-    }
+    setMarksheets(prev => [...prev, ...newFiles]);
   };
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0 || !studentId) return;
+    if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
-    
-    setResumeUploading(true);
-    try {
-      await uploadResume(file, { studentId });
-      setResumeUploaded(true);
-      sessionStorage.setItem("resume_id", "uploaded"); // placeholder to bypass guard
-    } catch (err) {
-      setError("Failed to upload resume.");
-    } finally {
-      setResumeUploading(false);
-    }
+    setResumeFileObj(file);
+    // Mark as selected (will be uploaded in handleSubmit)
   };
 
   const handleRemoveMarksheet = (id: string) => {
@@ -128,14 +110,10 @@ export default function OnboardingPage() {
     event.preventDefault();
     setError(null);
 
-    if (!studentId) {
-      setError("Session data is missing. Please sign in again.");
-      return;
-    }
-
     setLoading(true);
     try {
-      await createStudent({
+      // Step 1: Create student record
+      const response = await createStudent({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim(),
@@ -146,8 +124,41 @@ export default function OnboardingPage() {
         support_mode: supportMode,
         tone: tone,
         coding_required: true,
-        marksheets: marksheets.filter(m => m.status === 'uploaded').map(m => ({ file_name: m.name, file_path: m.path, size: m.size })),
+        marksheets: [],  // Don't send marksheets here - upload them separately below
       });
+
+      const newStudentId = response.student_id;
+      setStudentId(newStudentId);
+      sessionStorage.setItem("student_id", String(newStudentId));
+
+      // Step 2: Upload pending marksheets using the new student_id
+      const pendingMarksheets = marksheets.filter(m => m.status === 'pending' && m.fileObj);
+      if (pendingMarksheets.length > 0) {
+        for (const marksheet of pendingMarksheets) {
+          try {
+            console.log(`Uploading marksheet: ${marksheet.name} for student ${newStudentId}`);
+            setMarksheets(prev => prev.map(m => m.id === marksheet.id ? { ...m, status: 'uploading' } : m));
+            const res = await uploadMarksheet(marksheet.fileObj!, { studentId: newStudentId });
+            console.log(`Marksheet uploaded successfully:`, res);
+            setMarksheets(prev => prev.map(m => m.id === marksheet.id ? { ...m, status: 'uploaded', path: res.file_path } : m));
+          } catch (uploadErr) {
+            console.error(`Failed to upload marksheet ${marksheet.name}:`, uploadErr);
+            setError(`Marksheet upload failed: ${uploadErr instanceof Error ? uploadErr.message : 'Unknown error'}`);
+            setMarksheets(prev => prev.map(m => m.id === marksheet.id ? { ...m, status: 'error' } : m));
+          }
+        }
+      }
+
+      // Step 3: Upload resume if one was selected
+      if (resumeFileObj) {
+        try {
+          await uploadResume(resumeFileObj, { studentId: newStudentId });
+          sessionStorage.setItem("resume_id", "uploaded");
+        } catch (uploadErr) {
+          console.error("Failed to upload resume:", uploadErr);
+          setError("Resume upload failed, but student was created successfully.");
+        }
+      }
 
       sessionStorage.setItem("student_name", `${firstName} ${lastName}`);
       sessionStorage.setItem("known_skills_detailed", JSON.stringify(skills));
@@ -344,8 +355,8 @@ export default function OnboardingPage() {
             <p className="text-sm font-medium text-slate-700">Drop resume or <span className="text-indigo-600">browse</span></p>
           </div>
 
-          {resumeUploading && <p className="text-sm text-indigo-600 mt-3 font-medium">Uploading resume...</p>}
-          {resumeUploaded && <p className="text-sm text-emerald-600 mt-3 font-medium">Resume uploaded successfully!</p>}
+          {loading && <p className="text-sm text-indigo-600 mt-3 font-medium">Uploading...</p>}
+          {resumeFileObj && !loading && <p className="text-sm text-emerald-600 mt-3 font-medium">Resume selected - will upload on submit</p>}
         </div>
 
         {error && (
@@ -358,7 +369,7 @@ export default function OnboardingPage() {
           <button type="button" className="px-6 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition">
             Skip
           </button>
-          <button type="submit" disabled={loading || resumeUploading} className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition shadow-sm disabled:opacity-50 flex items-center gap-2">
+          <button type="submit" disabled={loading} className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition shadow-sm disabled:opacity-50 flex items-center gap-2">
             {loading ? <LoadingSpinner /> : null}
             Save and continue
           </button>

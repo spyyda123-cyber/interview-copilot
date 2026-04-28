@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from sqlalchemy.orm import Session
 import shutil
 import uuid
 import os
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Student, StudentProfile
+from app.models import Student, StudentProfile, Marksheet
 from app.schemas.student import StudentCreateRequest, StudentCreateResponse
+from shared.storage import get_s3_service
 
 router = APIRouter(prefix="/student", tags=["student"])
 
@@ -68,20 +69,106 @@ def create_student(payload: StudentCreateRequest, db: Session = Depends(get_db))
     return StudentCreateResponse(student_id=student.id)
 
 @router.post("/marksheets/upload")
-def upload_marksheet(file: UploadFile = File(...)):
+async def upload_marksheet(
+    student_id: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload and store marksheet for a student.
+    
+    PROCESS:
+    1. Validate student exists and file format
+    2. Read file bytes
+    3a. If S3 enabled: upload to S3 under marksheets/<uuid>.<ext>, store S3 URL
+    3b. If S3 disabled: save to local filesystem
+    4. Create Marksheet DB record linked to student
+    5. Return marksheet with S3 URL
+    """
     if not file.filename.lower().endswith((".pdf", ".jpg", ".jpeg", ".png")):
         raise HTTPException(status_code=400, detail="Only PDF, JPG, PNG files are supported.")
     
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    ext = os.path.splitext(file.filename)[1]
-    filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(settings.UPLOAD_DIR, filename)
+    # ── Validate student exists ──────────────────────────────────
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # ── Read file bytes ──────────────────────────────────────────
+    file_bytes = await file.read()
+    ext = os.path.splitext(file.filename)[1].lower()
+    file_type = ext.lstrip('.')  # e.g., 'pdf', 'jpg', 'png'
+    filename = f"{uuid.uuid4().hex}{ext}"
+    
+    # ── Storage: S3 (preferred) or local fallback ──────────────────
+    s3 = get_s3_service()
+    
+    if s3:
+        # Upload to S3 under marksheets/ prefix
+        s3_key = f"marksheets/{filename}"
+        content_type = "application/pdf" if ext == ".pdf" else f"image/{ext.lstrip('.')}"
+        if content_type == "image/jpg":
+            content_type = "image/jpeg"
         
-    # Return file info to be shown in UI and submitted with personal info form
+        try:
+            file_path = s3.upload_file(
+                file_bytes=file_bytes,
+                key=s3_key,
+                content_type=content_type,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"File upload to S3 failed: {exc}")
+    else:
+        # Fallback: save to local filesystem
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        file_path = os.path.join(settings.UPLOAD_DIR, filename)
+        with open(file_path, "wb") as buffer:
+            buffer.write(file_bytes)
+    
+    # ── Persist Marksheet record ─────────────────────────────────
+    marksheet = Marksheet(
+        student_id=student.id,
+        file_path=file_path,
+        file_name=file.filename,
+        file_type=file_type,
+    )
+    db.add(marksheet)
+    db.commit()
+    db.refresh(marksheet)
+    
+    # Return marksheet info  
     return {
+        "id": marksheet.id,
         "file_path": file_path,
         "file_name": file.filename,
+        "file_type": file_type,
+        "created_at": marksheet.created_at.isoformat(),
+    }
+
+
+@router.get("/marksheets/{student_id}")
+def get_student_marksheets(
+    student_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve all marksheets for a student.
+    
+    Returns list of marksheets with S3 URLs.
+    """
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    marksheets = db.query(Marksheet).filter(Marksheet.student_id == student_id).all()
+    
+    return {
+        "student_id": student_id,
+        "marksheets": [
+            {
+                "id": m.id,
+                "file_path": m.file_path,
+                "file_name": m.file_name,
+                "file_type": m.file_type,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in marksheets
+        ]
     }

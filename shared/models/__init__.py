@@ -12,6 +12,9 @@ from shared.models.student_models import (
     ScormSectionProgress,
     ScormPlanCompletion,
     PrepLicense,
+    Marksheet,
+    InterviewFeedback,
+    FeedbackAnalysisCache,
 )
 from shared.models.admin_models import (
     College,
@@ -52,5 +55,7 @@ __all__ = [
     "TokenTransactionType",
     "PlacementCompany",
     "PlacementApplication",
+    "InterviewFeedback",
+    "FeedbackAnalysisCache",
 ]
 

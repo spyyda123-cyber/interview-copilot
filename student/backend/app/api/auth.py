@@ -61,4 +61,4 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    return AuthResponse(student_id=student.id)
+    return AuthResponse(student_id=student.id, student_name=student.full_name)

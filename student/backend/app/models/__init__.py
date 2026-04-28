@@ -21,6 +21,9 @@ from shared.models import (
     TokenTransactionType,
     ScormSectionProgress,
     ScormPlanCompletion,
+    Marksheet,
+    InterviewFeedback,
+    FeedbackAnalysisCache,
 )
 
 __all__ = [
@@ -46,4 +49,8 @@ __all__ = [
     "TokenTransactionType",
     "ScormSectionProgress",
     "ScormPlanCompletion",
+    "Marksheet",
+    "Marksheet",
+    "InterviewFeedback",
+    "FeedbackAnalysisCache",
 ]

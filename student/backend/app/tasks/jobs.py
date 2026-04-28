@@ -67,6 +67,7 @@ OPTIMIZATION NOTES:
 """
 import logging
 import re
+import time
 import traceback
 
 from sqlalchemy.orm import Session
@@ -549,6 +550,14 @@ def generate_plan_summary(plan_id: int) -> dict:
             plan.role,
         )
 
+        # ── Inject agentic feedback intelligence (from Ollama analysis) ──────
+        try:
+            from app.services.feedback_agent_service import get_feedback_intelligence
+            feedback_intelligence = get_feedback_intelligence(db, plan.company_name)
+            logger.info("[PLAN-SUMMARY] Feedback intelligence injected for company=%s", plan.company_name)
+        except Exception:
+            feedback_intelligence = "No prior student feedback data available for this company yet."
+
         summary_prompt = f"""You are an elite interview strategist providing a candidate assessment.
 
     Your job is to analyze this candidate's readiness and deliver sharp, actionable coaching.
@@ -564,6 +573,12 @@ def generate_plan_summary(plan_id: int) -> dict:
     - Missing Skills: {', '.join(missing_skills) if missing_skills else 'None identified'}
     - Experience Level: {years_experience} ({inferred_level})
 
+    REAL STUDENT FEEDBACK INTELLIGENCE (from past students who interviewed at {plan.company_name}):
+    {feedback_intelligence}
+
+    Use the above feedback intelligence to make sections 3 and 4 highly specific to what
+    this company ACTUALLY asks in interviews, beyond what is in the standard JD.
+
     Return exactly these 5 sections with concise, actionable content under each heading.
     Write in direct, confident language as if briefing the candidate before battle.
 
@@ -578,10 +593,13 @@ def generate_plan_summary(plan_id: int) -> dict:
     3. Highest-Impact Preparation Focus
        The single most important area to invest time in right now.
        Explain WHY this area matters most for this specific company/role.
+       If student feedback shows a low relevance score, call this out explicitly.
+       Reference any surprise topics from past student feedback.
 
     4. Expected Interview Format
        Predict the likely interview rounds for {plan.company_name} ({plan.role or 'Software Engineer'}).
        Include typical question types, difficulty level, and what interviewers look for.
+       Specifically mention any topics that past students reported were asked but NOT covered in courses.
 
     5. Final 48-Hour Game Plan
        Exactly what to do in the last 48 hours before the interview.
@@ -622,5 +640,101 @@ def generate_plan_summary(plan_id: int) -> dict:
         logger.error("[PLAN-SUMMARY] traceback\n%s", traceback.format_exc())
         return {"plan_id": plan_id, "status": "error", "error": str(exc)}
 
+    finally:
+        db.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ─── AGENTIC FEEDBACK ANALYSIS TASKS ─────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+
+@celery_app.task(name="app.tasks.jobs.analyze_company_feedback")
+def analyze_company_feedback(company_name: str) -> dict:
+    """
+    On-demand agentic task: analyse feedback for ONE company and update cache.
+
+    Triggered immediately after a student submits feedback for a company.
+    Uses Gemini 1.5 Flash (free tier) for NLP topic extraction via feedback_agent_service.py.
+
+    Returns:
+        dict: {"company": ..., "status": "updated" | "skipped" | "error"}
+    """
+    logger.info("[FEEDBACK-AGENT] On-demand analysis triggered for company: %s", company_name)
+    db: Session = SessionLocal()
+    try:
+        from app.services.feedback_agent_service import refresh_company_analysis
+        updated = refresh_company_analysis(db, company_name)
+        status = "updated" if updated else "skipped"
+        logger.info("[FEEDBACK-AGENT] Company %s analysis result: %s", company_name, status)
+        return {"company": company_name, "status": status}
+    except Exception as exc:
+        logger.error("[FEEDBACK-AGENT] Failed analysis for %s: %s", company_name, str(exc))
+        return {"company": company_name, "status": "error", "error": str(exc)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.jobs.analyze_feedback_batch")
+def analyze_feedback_batch() -> dict:
+    """
+    Nightly Celery Beat task: analyse ALL companies with new feedback.
+
+    Scheduled to run at 2 AM daily (see celery_app.py beat_schedule).
+    Only re-processes companies where feedback_hash has changed (idempotent).
+
+    Pipeline per company:
+      1. SQL aggregation (avg_relevance, irrelevant_pct, etc.)  — zero LLM cost
+      2. Gemini 1.5 Flash NLP → extract missing_topics from out_of_box_questions
+         (1 free API call per company, only if feedback changed)
+      3. Build prompt_snippet
+      4. Upsert into feedback_analysis_cache
+
+    Rate limiting: 1-second delay between companies to respect Gemini free tier (15 RPM).
+
+    Returns:
+        dict: {"updated": N, "skipped": N, "errors": N, "companies": [...]}
+    """
+    logger.info("[FEEDBACK-AGENT] Nightly batch analysis started")
+    db: Session = SessionLocal()
+    results = {"updated": 0, "skipped": 0, "errors": 0, "companies": []}
+
+    try:
+        from shared.models.interview_feedback import InterviewFeedback
+        from app.services.feedback_agent_service import refresh_company_analysis
+
+        # Get all distinct companies that have feedback
+        companies = (
+            db.query(InterviewFeedback.company_name)
+            .distinct()
+            .all()
+        )
+        company_names = [c.company_name for c in companies]
+        logger.info("[FEEDBACK-AGENT] Found %d companies to process", len(company_names))
+
+        for company_name in company_names:
+            try:
+                updated = refresh_company_analysis(db, company_name)
+                if updated:
+                    results["updated"] += 1
+                    results["companies"].append({"company": company_name, "status": "updated"})
+                    # Rate-limit: Gemini free tier = 15 RPM — 1s delay between companies
+                    time.sleep(1)
+                else:
+                    results["skipped"] += 1
+                    results["companies"].append({"company": company_name, "status": "skipped"})
+            except Exception as exc:
+                results["errors"] += 1
+                results["companies"].append({"company": company_name, "status": "error", "error": str(exc)})
+                logger.error("[FEEDBACK-AGENT] Error processing %s: %s", company_name, str(exc))
+
+        logger.info(
+            "[FEEDBACK-AGENT] Batch complete — updated=%d skipped=%d errors=%d",
+            results["updated"], results["skipped"], results["errors"]
+        )
+        return results
+
+    except Exception as exc:
+        logger.error("[FEEDBACK-AGENT] Batch task failed: %s", str(exc))
+        return {"error": str(exc), "updated": 0, "skipped": 0, "errors": 1}
     finally:
         db.close()
