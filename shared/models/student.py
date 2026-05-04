@@ -39,7 +39,10 @@ class Student(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    resumes: Mapped[List["Resume"]] = relationship(back_populates="student")
+    resumes: Mapped[List["Resume"]] = relationship(
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
     marksheets: Mapped[List["Marksheet"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     targets: Mapped[List["TargetInterview"]] = relationship(
         back_populates="student",
@@ -49,7 +52,13 @@ class Student(Base):
         back_populates="student",
         cascade="all, delete-orphan",
     )
-    learning_plans: Mapped[List["LearningPlan"]] = relationship(back_populates="student")
-    prep_licenses: Mapped[List["PrepLicense"]] = relationship(back_populates="student")
+    learning_plans: Mapped[List["LearningPlan"]] = relationship(
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
+    prep_licenses: Mapped[List["PrepLicense"]] = relationship(
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
     feedbacks: Mapped[List["InterviewFeedback"]] = relationship(back_populates="student", cascade="all, delete-orphan")
 

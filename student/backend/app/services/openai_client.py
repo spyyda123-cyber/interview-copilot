@@ -221,7 +221,7 @@ def _get_proficient_languages(known_skills: list) -> list[str]:
 def _build_language_transition_block(context: dict) -> str:
     """
     Build a short LANGUAGE TRANSITION CONTEXT block injected into the user message.
-    This activates Section 9 of the system prompt with concrete data.
+    This activates Section 5 of the system prompt with concrete data.
     """
     known_skills = context.get("known_skills", [])
     primary_skill = context.get("primary_skill", "")
@@ -261,12 +261,12 @@ def _build_language_transition_block(context: dict) -> str:
         if transitions:
             lines.append(
                 f"* Active Transition(s): {', '.join(transitions)}"
-                " — Apply Section 9 cross-language analogy teaching in foundation tasks."
+                " — Embed comparison study INLINE within relevant task descriptions (see system prompt Section 5). Do NOT create a separate transition day or module."
             )
         else:
             lines.append("* No language transition needed (student already knows required languages).")
     else:
-        lines.append("* No language transition detected — skip Section 9.")
+        lines.append("* No language transition detected — skip Section 5.")
 
     return "\n".join(lines)
 
@@ -294,9 +294,9 @@ def _build_user_message(context: dict) -> str:
     missing_skills   = context.get("missing_skills", [])
     keyword_score    = context.get("keyword_score", 0)
 
-    resume_context      = context.get("resume_context", "Not available")
-    profile_context     = context.get("profile_context", "Not available")
-    company_intelligence = context.get("company_context", "No company interview intelligence available")
+    resume_context      = context.get("resume_context", "Not available")[:1500]  # Limit to 1500 chars
+    profile_context     = context.get("profile_context", "Not available")[:800]
+    company_intelligence = context.get("company_context", "No company interview intelligence available")[:1500]
 
     # Format known_skills
     known_skills_limited = known_skills[:15] if isinstance(known_skills, list) else []
@@ -313,7 +313,7 @@ def _build_user_message(context: dict) -> str:
     # Truncate JD
     jd_trimmed = jd_text[:800] if jd_text and len(jd_text) > 800 else jd_text
 
-    # Cross-language transition block (activates system prompt Section 9)
+    # Cross-language transition block (activates system prompt Section 5)
     lang_block = _build_language_transition_block(context)
     lang_section = f"\n{lang_block}\n" if lang_block else ""
 
@@ -354,7 +354,7 @@ COMPANY INTERVIEW INTELLIGENCE:
 
 TASK:
 Create a day-by-day interview preparation strategy following ALL sections of the system prompt.
-If a language transition is detected above, apply Section 9 cross-language teaching in foundation tasks.
+If a language transition is detected above, embed comparison study INLINE within relevant task descriptions on Day 1-2 only (see system prompt Section 5). Do NOT create a separate transition day or module.
 
 Rules:
 * Prioritize missing skills and Beginner-proficiency required skills FIRST (disqualifiers)
@@ -402,6 +402,7 @@ def _call_openai_with_timeout(
                 "json_schema": response_schema,
             },
             temperature=0.3,
+            max_tokens=2500,
         )
         content = response.choices[0].message.content or "{}"
         usage = response.usage

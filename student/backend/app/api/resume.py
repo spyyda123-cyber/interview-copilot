@@ -135,6 +135,29 @@ def upload_resume(
     sections = parse_resume_file(resume.id, file_path_str, db)
     resume_skills = _extract_resume_skills(sections, resume.raw_text or "")
 
+    # Automatically populate StudentProfile with extracted skills
+    from app.models import StudentProfile
+    profile = db.query(StudentProfile).filter(StudentProfile.student_id == student_id).first()
+    if not profile:
+        profile = StudentProfile(student_id=student_id, support_mode="Guided coaching", tone="Supportive", coding_required=True)
+        db.add(profile)
+
+    # Convert to expected JSON format
+    known_skills = []
+    for skill in resume_skills:
+        known_skills.append({"skill": skill.capitalize(), "proficiency": "Advanced"})
+    profile.known_skills = known_skills
+
+    if not profile.primary_skill or profile.primary_skill.lower() == "unknown":
+        common_langs = ["python", "java", "javascript", "c++", "c#", "go", "ruby", "php", "typescript"]
+        found_lang = next((lang for lang in common_langs if lang in [s.lower() for s in resume_skills]), None)
+        if found_lang:
+            profile.primary_skill = found_lang.capitalize()
+        elif resume_skills:
+            profile.primary_skill = list(resume_skills)[0].capitalize()
+
+    db.commit()
+
     missing = []
     ats_score = 0.0
 
@@ -184,6 +207,32 @@ def upload_resume(
         missing_skills=missing,
         ats_score=ats_score,
     )
+
+
+@router.get("/latest")
+def get_latest_resume(
+    student_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get the most recently uploaded resume for a student.
+
+    Used by the frontend after activation to retrieve resume_id
+    for session storage without requiring a new upload.
+    """
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    resume = (
+        db.query(Resume)
+        .filter(Resume.student_id == student_id)
+        .order_by(Resume.created_at.desc())
+        .first()
+    )
+    if not resume:
+        raise HTTPException(status_code=404, detail="No resume found for this student")
+
+    return {"resume_id": resume.id, "student_id": student_id}
 
 
 @router.get("/{resume_id}/download")

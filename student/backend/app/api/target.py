@@ -108,3 +108,34 @@ def get_target_status(target_id: int, db: Session = Depends(get_db)):
         difficulty=target.difficulty,
         round_structure=target.round_structure,
     )
+
+
+@router.get("/list")
+def list_targets(student_id: int, db: Session = Depends(get_db)):
+    """List all target interviews for a student.
+
+    Used by the plan page to auto-resolve the active target_id after
+    activation, without requiring the user to re-upload a job description.
+    """
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    targets = (
+        db.query(TargetInterview)
+        .filter(TargetInterview.student_id == student_id)
+        .order_by(TargetInterview.created_at.desc())
+        .all()
+    )
+
+    return {
+        "targets": [
+            {
+                "id": t.id,
+                "company_name": t.company_name,
+                "role": t.role,
+                "analysis_status": t.analysis_status,
+            }
+            for t in targets
+        ]
+    }

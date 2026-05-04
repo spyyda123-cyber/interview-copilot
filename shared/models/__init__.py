@@ -27,6 +27,7 @@ from shared.models.placement import (
     PlacementCompany,
     PlacementApplication,
 )
+from shared.models.token_request import TokenRequest
 from shared.models.enums import CollegeStatus, UserRole, UserStatus, TokenTransactionType
 
 __all__ = [
@@ -55,6 +56,7 @@ __all__ = [
     "TokenTransactionType",
     "PlacementCompany",
     "PlacementApplication",
+    "TokenRequest",
     "InterviewFeedback",
     "FeedbackAnalysisCache",
 ]

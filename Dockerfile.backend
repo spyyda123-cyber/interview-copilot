@@ -1,0 +1,44 @@
+# Use official Python lightweight image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (required for psycopg2 and pgvector)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the shared module and the specific backend requirements
+# The build context should be the root `interview-copilot` folder
+COPY shared /app/shared
+
+# Argument to determine which backend we are building (student, admin, super-admin)
+ARG BACKEND_DIR
+
+# Copy requirements for the specific backend
+COPY ${BACKEND_DIR}/requirements.txt /app/${BACKEND_DIR}/requirements.txt
+
+# Install python dependencies
+RUN pip install --upgrade pip
+# Install shared module requirements first
+RUN pip install -r /app/shared/requirements.txt
+# Install specific backend requirements
+RUN pip install -r /app/${BACKEND_DIR}/requirements.txt
+# Install the shared module itself in editable mode so other packages can find it
+RUN pip install -e /app/shared
+
+# Copy the actual backend code
+COPY ${BACKEND_DIR} /app/${BACKEND_DIR}
+
+# Set the working directory to the specific backend
+WORKDIR /app/${BACKEND_DIR}
+
+# The command will be overridden in docker-compose.prod.yml (e.g., uvicorn or celery)
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -3,20 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import FeedbackModal from "../components/FeedbackModal";
-import { getPendingFeedbacks, getAllFeedbacks, type PendingFeedbackItem, type FeedbackResponse } from "@/src/lib/api";
+import { getPendingFeedbacks, getAllFeedbacks, getStudentApplications, type PendingFeedbackItem, type FeedbackResponse, type ApplicationItem } from "@/src/lib/api";
 
-const MOCK_INTERVIEWS = [
-  { id: 1, company: "TCS Digital", role: "Java Backend Developer", date: "2026-03-25", status: "completed", logoColor: "#1e3a8a", skills: ["Java", "SQL"] },
-  { id: 2, company: "Google", role: "SDE Intern", date: "2026-04-02", status: "completed", logoColor: "#ea4335", skills: ["DSA", "System Design"] },
-  { id: 3, company: "Infosys SP", role: "Systems Engineer", date: "2026-05-05", status: "upcoming", logoColor: "#0ea5e9", skills: ["React", "Node.js"] },
-];
-
-const MOCK_STUDY = [
-  { topic: "Java Fundamentals", pct: 85 },
-  { topic: "Data Structures & Algo", pct: 72 },
-  { topic: "React + Node.js", pct: 55 },
-  { topic: "System Design", pct: 40 },
-];
 
 function getHour() { return new Date().getHours(); }
 function greeting(name: string) {
@@ -63,6 +51,7 @@ export default function DashboardPage() {
   const [studentName, setStudentName] = useState("Student");
   const [pending, setPending] = useState<PendingFeedbackItem[]>([]);
   const [feedbacks, setFeedbacks] = useState<FeedbackResponse[]>([]);
+  const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [currentPending, setCurrentPending] = useState<PendingFeedbackItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,9 +71,14 @@ export default function DashboardPage() {
     (async () => {
       setLoading(true);
       try {
-        const [pRes, fRes] = await Promise.all([getPendingFeedbacks(studentId), getAllFeedbacks(studentId)]);
+        const [pRes, fRes, appRes] = await Promise.all([
+          getPendingFeedbacks(studentId),
+          getAllFeedbacks(studentId),
+          getStudentApplications(studentId)
+        ]);
         setPending(pRes.pending);
         setFeedbacks(fRes);
+        setApplications(appRes.applications || []);
         if (pRes.pending.length > 0) { setCurrentPending(pRes.pending[0]); setShowModal(true); }
       } catch { /* silent */ } finally { setLoading(false); }
     })();
@@ -102,8 +96,32 @@ export default function DashboardPage() {
 
   const fmt = (s: string) => new Date(s + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-  const upcoming = MOCK_INTERVIEWS.filter(i => i.status === "upcoming");
-  const completed = MOCK_INTERVIEWS.filter(i => i.status === "completed");
+  const getLogoColor = (name: string) => {
+    const colors = ["#1e3a8a", "#ea4335", "#0ea5e9", "#10b981", "#8b5cf6", "#f59e0b"];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const processedInterviews = applications
+    .filter(a => a.application_status === "ACTIVATED" || a.application_status === "APPROVED")
+    .map(a => {
+      const dateStr = a.interview_date || new Date().toISOString().split('T')[0];
+      const isPast = new Date(dateStr) < new Date();
+      return {
+        id: a.application_id,
+        company: a.company_name,
+        role: a.role,
+        date: dateStr,
+        status: isPast ? "completed" : "upcoming",
+        logoColor: getLogoColor(a.company_name),
+        skills: [] as string[]
+      };
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const upcoming = processedInterviews.filter(i => i.status === "upcoming");
+  const completed = processedInterviews.filter(i => i.status === "completed");
   const nextInterview = upcoming[0] ?? null;
   const avgRelevance = feedbacks.length ? (feedbacks.reduce((s, f) => s + f.relevance_score, 0) / feedbacks.length).toFixed(1) : null;
 
@@ -167,7 +185,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: "Upcoming Interviews", value: upcoming.length, sub: nextInterview ? `Next: ${nextInterview.company} · ${fmt(nextInterview.date)}` : "No upcoming", color: "#6366f1", bg: "#eef2ff", icon: <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/> },
-          { label: "Study Plan Progress", value: "68%", sub: "3 topics remaining in Java", color: "#10b981", bg: "#ecfdf5", icon: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></> },
+          { label: "Study Plan Progress", value: "--", sub: "Activate a plan to begin", color: "#10b981", bg: "#ecfdf5", icon: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></> },
           { label: "Feedback Pending", value: pending.length, sub: pending.length > 0 ? `Latest: ${pending[0].company_name}` : "All caught up!", color: "#f59e0b", bg: "#fffbeb", icon: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></> },
           { label: "Interviews Cleared", value: completed.length, sub: avgRelevance ? `Avg relevance: ${avgRelevance}/5` : "Give feedback for insights", color: "#0ea5e9", bg: "#e0f2fe", icon: <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></> },
         ].map(({ label, value, sub, color, bg, icon }) => (
@@ -192,12 +210,17 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[15px] font-bold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-dm-sans)" }}>
               My Interviews
-              <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)]">{MOCK_INTERVIEWS.length}</span>
+              <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)]">{processedInterviews.length}</span>
             </h2>
             <button className="text-[12px] font-semibold text-[var(--accent)] hover:underline" onClick={() => router.push("/interviews")}>View all →</button>
           </div>
           <div className="space-y-3">
-            {MOCK_INTERVIEWS.map(iv => {
+            {processedInterviews.length === 0 ? (
+               <div className="py-8 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-muted)]/20">
+                 <p className="text-sm text-[var(--text-muted)] font-medium">No upcoming interviews yet.</p>
+                 <button onClick={() => router.push("/target")} className="mt-2 text-xs font-semibold text-[var(--accent)] hover:underline">Explore placement opportunities →</button>
+               </div>
+            ) : processedInterviews.map(iv => {
               const fb = feedbacks.find(f => f.company_name === iv.company);
               const isPast = new Date(iv.date) < new Date();
               const needsFb = isPast && !fb;
@@ -266,21 +289,11 @@ export default function DashboardPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[13px] font-bold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-dm-sans)" }}>Study Progress</h3>
-              <button className="text-[11px] font-semibold text-[var(--accent)] hover:underline" onClick={() => router.push("/study-plan")}>Full plan →</button>
+              <button className="text-[11px] font-semibold text-[var(--accent)] hover:underline" onClick={() => router.push("/plan")}>Full plan →</button>
             </div>
-            <div className="space-y-3">
-              {MOCK_STUDY.map(({ topic, pct }) => {
-                const color = pct >= 80 ? "#10b981" : pct >= 60 ? "#6366f1" : pct >= 40 ? "#f59e0b" : "#f43f5e";
-                return (
-                  <div key={topic}>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-[12px] font-semibold text-[var(--text-secondary)]">{topic}</span>
-                      <span className="text-[11px] font-bold" style={{ color }}>{pct}%</span>
-                    </div>
-                    <ProgressBar pct={pct} color={color} />
-                  </div>
-                );
-              })}
+            <div className="py-8 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-muted)]/20">
+              <p className="text-sm text-[var(--text-muted)] font-medium">Activate a study plan to track progress.</p>
+              <button onClick={() => router.push("/target")} className="mt-2 text-xs font-semibold text-[var(--accent)] hover:underline">View placements →</button>
             </div>
           </div>
         </div>

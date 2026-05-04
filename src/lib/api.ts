@@ -40,7 +40,7 @@ const getApiBaseUrl = () => {
   return url;
 };
 
-const API_TIMEOUT_MS = 15000;
+const API_TIMEOUT_MS = 30000; // 30 seconds for async operations and LLM generation
 
 type ApiError = {
   message?: string;

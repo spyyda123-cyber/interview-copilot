@@ -14,6 +14,8 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<CompanyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<CompanyResponse | null>(null);
+  const [showJDModal, setShowJDModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -28,6 +30,11 @@ export default function CompaniesPage() {
     }
     load();
   }, []);
+
+  const handleViewJD = (company: CompanyResponse) => {
+    setSelectedCompany(company);
+    setShowJDModal(true);
+  };
 
   return (
     <div className="flex h-screen flex-col bg-[#fdfdfd]">
@@ -108,7 +115,10 @@ export default function CompaniesPage() {
                             : "-"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <button className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-xs font-semibold text-[#4f46e5] transition-all hover:bg-[#f8fafc]">
+                          <button 
+                            onClick={() => handleViewJD(comp)}
+                            className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-1.5 text-xs font-semibold text-[#4f46e5] transition-all hover:bg-[#f8fafc]"
+                          >
                             View JD
                           </button>
                         </td>
@@ -152,6 +162,52 @@ export default function CompaniesPage() {
           </div>
         </div>
       </div>
+
+      {/* JD Modal */}
+      {showJDModal && selectedCompany && (
+        <div className="fixed inset-y-0 right-0 left-64 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl max-h-[80vh] w-full overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="border-b border-gray-200 px-8 py-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {selectedCompany.company_name} — {selectedCompany.role}
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">Job Description</p>
+              </div>
+              <button 
+                onClick={() => setShowJDModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto px-8 py-6">
+              {selectedCompany.job_description ? (
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+                  {selectedCompany.job_description}
+                </div>
+              ) : (
+                <p className="text-gray-500 italic">No job description provided yet.</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 px-8 py-4 flex justify-end gap-3 bg-gray-50">
+              <button 
+                onClick={() => setShowJDModal(false)}
+                className="px-6 py-2.5 rounded-lg text-gray-700 border border-gray-300 font-semibold text-sm hover:bg-gray-100 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

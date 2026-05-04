@@ -698,22 +698,41 @@ def generate_learning_plan(
         logger.info("[PLAN-TRACE] Step 4: Cache hit - returned existing plan plan_id=%s", existing_plan.id)
         return existing_plan
 
-    # ===== PHASE 1: GENERATE SKELETON PLAN (FAST, NO LLM) =====
-    logger.info("[PLAN-TRACE] Step 5: Generating skeleton plan (Phase 1)")
+    # ===== PHASE 1: GENERATE LIVE LLM PLAN =====
+    logger.info("[PLAN-TRACE] Step 5: Generating live LLM plan")
     
-    difficulty = target.difficulty if target else "unknown"
-    missing_skills = gap.missing_skills if gap else []
+    context = {
+        "student_name": getattr(student, "first_name", "Student") or getattr(student, "name", "Student"),
+        "primary_skill": profile.primary_skill if profile else "Unknown",
+        "known_skills": profile.known_skills if profile else [],
+        "days_available": days_available,
+        "support_mode": profile.support_mode if profile else "Guided",
+        "tone": profile.tone if profile else "Supportive",
+        "coding_required": profile.coding_required if profile else True,
+        
+        "company_name": company_name,
+        "role": role or "General",
+        "difficulty": target.difficulty if target else "Unknown",
+        "round_structure": target.round_structure if target else "Unknown",
+        "jd_text": target.jd_text if target else "Not provided",
+        
+        "ats_score": gap.ats_score if gap else 0,
+        "missing_skills": gap.missing_skills if gap else [],
+        "keyword_score": gap.keyword_score if gap else 0,
+        
+        "resume_context": _get_resume_context(db, student_id),
+        "profile_context": _get_profile_context(profile),
+        "company_context": _get_feedback_intelligence(db, company_name)
+    }
+
+    raw_response = generate_plan_with_llm(context)
+    plan_data = _parse_plan_json(raw_response)
     
-    skeleton_plan = _generate_skeleton_plan(
-        days_available,
-        company_name,
-        role,
-        difficulty,
-        missing_skills,
-    )
+    if not _validate_plan_json(plan_data):
+        raise LLMValidationError("Generated plan failed schema validation")
     
-    # Save skeleton plan to DB immediately
-    logger.info("[PLAN-TRACE] Step 6: Saving skeleton plan to DB")
+    # Save plan to DB immediately
+    logger.info("[PLAN-TRACE] Step 6: Saving live plan to DB")
     if existing_plan:
         plan = existing_plan
         plan.student_id = student_id
@@ -721,11 +740,11 @@ def generate_learning_plan(
         plan.role = role or "general"
         plan.days_available = days_available
         plan.status = "ready"
-        plan.plan_json = skeleton_plan
-        plan.tasks_generated = 0  # Not yet enriched
+        plan.plan_json = plan_data
+        plan.tasks_generated = 1  # Enriched
         plan.summary_generated = False
         try:
-            plan.plan_type = "skeleton"  # Mark as skeleton type for diagnostics
+            plan.plan_type = "ai"
         except Exception:
             pass
     else:
@@ -736,22 +755,22 @@ def generate_learning_plan(
             days_available=days_available,
             plan_signature=plan_signature,
             status="ready",
-            plan_json=skeleton_plan,
-            tasks_generated=0,  # Not yet enriched
+            plan_json=plan_data,
+            tasks_generated=1,
             summary_generated=False,
         )
         try:
-            plan.plan_type = "skeleton"  # Mark as skeleton type
+            plan.plan_type = "ai"
         except Exception:
             pass
         db.add(plan)
         db.flush()
 
-    # Create learning tasks from skeleton (required for backward compatibility)
+    # Create learning tasks
     if existing_plan:
         db.query(LearningTask).filter(LearningTask.plan_id == plan.id).delete()
 
-    for day_data in skeleton_plan.get("daily_plan", []):
+    for day_data in plan_data.get("daily_plan", []):
         day_num = day_data["day"]
         for task_index, task_data in enumerate(day_data["tasks"], start=1):
             task = LearningTask(
@@ -764,7 +783,7 @@ def generate_learning_plan(
             )
             db.add(task)
 
-    logger.info("[PLAN-TRACE] Step 7: Skeleton plan saved to DB. plan_id=%s status=ready", plan.id)
+    logger.info("[PLAN-TRACE] Step 7: Live plan saved to DB. plan_id=%s status=ready", plan.id)
     db.commit()
     db.refresh(plan)
     
@@ -775,10 +794,9 @@ def generate_learning_plan(
         generate_plan_summary.delay(plan.id)
         logger.info("[PLAN-TRACE] Plan summary task enqueued plan_id=%s", plan.id)
     except Exception as enqueue_exc:
-        logger.warning("[PLAN-TRACE] Failed to enqueue plan summary task: %s (plan stays as skeleton)", str(enqueue_exc))
-        # Don't fail the plan if summary task can't be enqueued; skeleton is still valid
+        logger.warning("[PLAN-TRACE] Failed to enqueue plan summary task: %s", str(enqueue_exc))
     
-    logger.info("[PLAN-TRACE] Step 9: Plan generation complete (skeleton returned, summary generation in background) plan_id=%s", plan.id)
+    logger.info("[PLAN-TRACE] Step 9: Plan generation complete plan_id=%s", plan.id)
     return plan
 
 

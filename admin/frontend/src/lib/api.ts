@@ -115,6 +115,26 @@ export type DashboardSummary = {
   active_students: number;
   inactive_students: number;
   low_token_alert: boolean;
+  total_companies: number;
+  active_companies: number;
+  pending_approvals: number;
+  recent_applications: Array<{
+    student_name: string;
+    student_email: string;
+    company_name: string;
+    role: string;
+    status: string;
+    applied_at: string;
+  }>;
+  active_companies_list: Array<{
+    id: string;
+    company_name: string;
+    role: string;
+    package_min: string | null;
+    package_max: string | null;
+    total_applied: number;
+    approved: number;
+  }>;
   recent_activity: Array<{
     student_name: string | null;
     action_type: string;
@@ -474,3 +494,93 @@ export async function updateCompany(id: string, payload: CompanyUpdate) {
   });
 }
 
+// ── Token Requests (Admin → Super Admin) ───────────────────────
+
+export type TokenRequestCreate = {
+  count: number;
+  note?: string;
+};
+
+export type TokenRequestResponse = {
+  id: string;
+  college_id: string;
+  count: number;
+  note?: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type TokenRequestListResponse = {
+  items: TokenRequestResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function createTokenRequest(payload: TokenRequestCreate) {
+  return authFetch<TokenRequestResponse>('/token-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listTokenRequests(page: number = 1, per_page: number = 20) {
+  return authFetch<TokenRequestListResponse>(`/token-requests?page=${page}&per_page=${per_page}`);
+}
+
+// ── Placement Applications ─────────────────────────────────────
+
+export type ApplicationItem = {
+  application_id: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  department?: string | null;
+  company_id: string;
+  company_name: string;
+  role: string;
+  application_status: string;
+  applied_at: string;
+  cgpa?: number | null;
+  backlogs?: number | null;
+  roll_no?: string | null;
+  meets_cgpa?: boolean | null;
+  meets_backlogs?: boolean | null;
+  meets_dept?: boolean | null;
+};
+
+export type ApplicationListResponse = {
+  applications: ApplicationItem[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function listApplications(params: {
+  company_id?: string;
+  status?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params.company_id) qs.set('company_id', params.company_id);
+  if (params.status) qs.set('status', params.status);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.per_page) qs.set('per_page', String(params.per_page));
+  return authFetch<ApplicationListResponse>(`/applications${qs.toString() ? `?${qs.toString()}` : ''}`);
+}
+
+export async function approveApplication(applicationId: string) {
+  return authFetch<{ status: string; application_id: string }>(
+    `/applications/${applicationId}/approve`,
+    { method: 'PATCH' }
+  );
+}
+
+export async function rejectApplication(applicationId: string) {
+  return authFetch<{ status: string; application_id: string }>(
+    `/applications/${applicationId}/reject`,
+    { method: 'PATCH' }
+  );
+}

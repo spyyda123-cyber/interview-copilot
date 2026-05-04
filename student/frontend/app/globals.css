@@ -217,6 +217,10 @@ h1, h2, h3, h4, h5, h6 {
   position: relative;
 }
 
+.main-content.modal-scroll-lock {
+  overflow: hidden !important;
+}
+
 /* ── Cards ── */
 .card {
   background: var(--bg-card);

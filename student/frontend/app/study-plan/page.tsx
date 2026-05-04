@@ -103,7 +103,99 @@ import {
   updateBookmark,
   type ScormSectionItem,
 } from "@/src/lib/scorm";
-import { getLatestPrep, generateCodeReport } from "@/src/lib/api";
+import { generateCodeReport, getLatestPrep, getPrepStatus, type PlanDetailResponse } from "@/src/lib/api";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ *  AI ROADMAP VIEW
+ * ───────────────────────────────────────────────────────────────────────────── */
+function AIRoadmapView({ plan }: { plan: PlanDetailResponse }) {
+  const data = plan.plan_json as any;
+  const dailyPlan = data.daily_plan || [];
+
+  return (
+    <div className="h-full flex flex-col bg-white rounded-2xl border overflow-hidden" style={{ borderColor: C.border }}>
+      {/* Header */}
+      <div className="px-6 py-5 border-b bg-gradient-to-r from-violet-50 to-indigo-50" style={{ borderColor: C.border }}>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-600 text-white shadow-sm">
+            <IconBook size={18} />
+          </div>
+          <h2 className="text-lg font-bold" style={{ color: C.heading }}>Strategic AI Roadmap</h2>
+        </div>
+        <p className="text-[13px] leading-relaxed max-w-3xl" style={{ color: C.body }}>
+          {data.overview || `Personalized ${plan.days_available}-day preparation strategy for your ${plan.role} interview at ${plan.company_name}.`}
+        </p>
+      </div>
+
+      {/* Timeline Content */}
+      <div className="flex-1 overflow-y-auto editorial-scrollbar p-6 space-y-8 bg-[#FDFDFF]">
+        {dailyPlan.map((day: any, dIdx: number) => (
+          <div key={dIdx} className="relative pl-10">
+            {/* Timeline Line */}
+            {dIdx < dailyPlan.length - 1 && (
+              <div className="absolute left-4 top-8 bottom-[-32px] w-0.5 bg-gray-100" />
+            )}
+            
+            {/* Day Bubble */}
+            <div className="absolute left-0 top-0 flex items-center justify-center w-8 h-8 rounded-full border-2 bg-white z-10" 
+                 style={{ borderColor: C.purple, color: C.purple }}>
+              <span className="text-[11px] font-bold">{day.day}</span>
+            </div>
+
+            <div className="mb-2">
+              <h3 className="text-[14px] font-bold uppercase tracking-wider mb-3" style={{ color: C.purple }}>
+                Day {day.day}: {day.focus}
+              </h3>
+              
+              <div className="grid gap-3">
+                {day.tasks.map((task: any, tIdx: number) => (
+                  <div key={tIdx} className="group relative p-4 rounded-xl border bg-white hover:shadow-md transition-all hover:border-violet-200" 
+                       style={{ borderColor: C.border }}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-[13px] font-bold group-hover:text-violet-600 transition-colors" style={{ color: C.heading }}>
+                            {task.title}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 font-medium" style={{ color: C.muted }}>
+                            {task.duration_minutes} min
+                          </span>
+                        </div>
+                        <p className="text-[12px] leading-relaxed" style={{ color: C.secondary }}>
+                          {task.description}
+                        </p>
+                      </div>
+                      <div className="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors group-hover:border-violet-400" 
+                           style={{ borderColor: C.border }}>
+                        <div className="w-2 h-2 rounded-sm bg-violet-600 opacity-0 transition-opacity group-hover:opacity-20" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Resources Card */}
+        {data.resources && data.resources.length > 0 && (
+          <div className="mt-8 p-5 rounded-2xl border bg-gray-50/50" style={{ borderColor: C.border }}>
+            <h4 className="text-[13px] font-bold mb-3 flex items-center gap-2" style={{ color: C.heading }}>
+              <IconBook size={14} /> Recommended Resources
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {data.resources.map((res: string, i: number) => (
+                <span key={i} className="px-3 py-1.5 rounded-lg bg-white border text-[11px] font-medium shadow-sm" style={{ borderColor: C.border, color: C.body }}>
+                  {res}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ──────────────────────────────────────────────
  *  DATA TYPES
@@ -120,6 +212,7 @@ interface Question {
   a: string;
   explanation: string;
   detailedExplanation?: string;
+  pythonBridgingNote?: string;  // shown only when primarySkill !== target language
   coverImageUrl?: string | null;
   explanationPoints?: ExplanationPoint[];
 }
@@ -177,6 +270,14 @@ const PLAN_MODULES: Record<string, { title: string; sub: string; progress: numbe
     { title: "Aptitude & Reasoning", sub: "Quant, Verbal, Logical", progress: 80, color: "#f59e0b" },
     { title: "Communication skills", sub: "English, Group Discussion", progress: 0, color: "#e2e8f0" },
     { title: "HR round prep", sub: "FAQs, Situational", progress: 0, color: "#e2e8f0" },
+  ],
+  "Tech Startup": [
+    { title: "Java Foundations", sub: "Types, OOP, Syntax — with Python comparisons", progress: 0, color: "#22c55e" },
+    { title: "Core Java fundamentals", sub: "OOP, Collections, Streams", progress: 0, color: "#3b82f6" },
+    { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#f59e0b" },
+    { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+    { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+    { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
   ],
 };
 
@@ -508,6 +609,244 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
   ],
 };
 
+// ─── Python fundamentals ───────────────────────────────────────────────────
+MODULE_SECTIONS["Python fundamentals"] = [
+  {
+    title: "Python Essentials",
+    timeMinutes: 20,
+    coverImage: "/study-images/oop_concepts.svg",
+    concepts: ["Dynamic Typing", "List Comprehensions", "Indentation & Style", "Dictionaries & Sets"],
+    questions: [
+      {
+        q: "How does Python's dynamic typing work?",
+        a: "In Python, types are associated with objects, not variables. You can reassign a variable to any type at any time.",
+        explanation: "x = 5; x = 'hello' is perfectly valid in Python. The interpreter checks types at runtime. This provides flexibility but requires more discipline and unit testing to avoid runtime errors.",
+        detailedExplanation: "Dynamic Typing in Python\n\nPython is a dynamically typed language. This means you don't declare the type of a variable when you create one. The type is determined by the value assigned to it at runtime.\n\nNames (variables) are just references to objects in memory. If you reassign a name to a new object of a different type, the old object is eventually garbage collected if no other names reference it.\n\nWhile this makes Python fast to write, it means bugs like 'TypeError: 'NoneType' object is not subscriptable' only appear when the code actually runs. Modern Python uses 'Type Hints' (PEP 484) to allow static analysis with tools like mypy without changing the runtime behavior.",
+      },
+      {
+        q: "What is a list comprehension?",
+        a: "A concise way to create lists based on existing iterables: [expression for item in iterable if condition].",
+        explanation: "It is more readable and often faster than traditional for-loops for simple transformations.",
+        detailedExplanation: "Pythonic List Comprehensions\n\nList comprehensions provide a concise way to create lists. Common use cases are to make new lists where each element is the result of some operation applied to each member of another sequence, or to create a subsequence of those elements that satisfy a certain condition.\n\nExample: squares = [x**2 for x in range(10)]\n\nThey can also include conditionals: evens = [x for x in range(10) if x % 2 == 0]\n\nPython also supports dictionary comprehensions {k: v for ...} and set comprehensions {x for ...}. These are the idiomatic 'Pythonic' way to handle data transformations, replacing the need for map() and filter() in many cases.",
+      }
+    ],
+    quiz: [
+      { question: "Python variables are:", options: ["Statically typed", "Dynamically typed", "Untyped", "Fixed at declaration"], correctIndex: 1, explanation: "Python is dynamically typed; variables can change types at runtime." },
+      { question: "Which is a valid list comprehension?", options: ["(x for x in list)", "[x : x in list]", "[x for x in list]", "{x for x in list}"], correctIndex: 2, explanation: "[x for x in list] creates a list. (x for x in list) creates a generator." },
+    ]
+  }
+];
+
+// ─── Java to Python Transition ──────────────────────────────────────────────
+MODULE_SECTIONS["Java to Python Transition"] = [
+  {
+    title: "Java vs Python: The Mindset Shift",
+    timeMinutes: 15,
+    coverImage: "/study-images/oop_concepts.svg",
+    concepts: ["Boilerplate vs Conciseness", "JVM vs CPython", "Type Safety vs Developer Speed"],
+    questions: [
+      {
+        q: "What is the biggest mental shift when moving from Java to Python?",
+        a: "Moving from 'explicit and verbose' to 'implicit and concise'. You stop writing getters/setters and focus on high-level logic.",
+        explanation: "In Java, you spend time satisfying the compiler. In Python, you spend time writing logic. You trade compile-time safety for development speed.",
+        detailedExplanation: "Java to Python Mindset Shift\n\nJava developers often find Python 'dangerously easy'. In Java, you define classes, private fields, public getters, and handle checked exceptions. In Python, fields are public by default, and 'getters' are replaced by the @property decorator only when logic is needed.\n\nDuck Typing: 'If it walks like a duck and quacks like a duck, it is a duck.' In Java, you must implement an interface. In Python, you just need the object to have the required method. This makes testing and mocking much easier but requires more runtime validation.",
+      }
+    ],
+    quiz: [
+      { question: "In Python, which is the idiomatic way to handle private fields?", options: ["private keyword", "Getter/Setter methods", "Naming convention (e.g. _name)", "Encapsulation is not possible"], correctIndex: 2, explanation: "Python uses a single underscore convention to indicate internal use; it doesn't enforce access level at the language level." }
+    ]
+  }
+];
+
+// ─── Frontend to Backend Shift ──────────────────────────────────────────────
+MODULE_SECTIONS["Frontend to Backend Shift"] = [
+  {
+    title: "Entering the Server-Side",
+    timeMinutes: 20,
+    coverImage: "/study-images/oop_concepts.svg",
+    concepts: ["Statelessness", "Concurrency", "Data Persistence", "Security & Auth"],
+    questions: [
+      {
+        q: "How does 'State' differ between Frontend and Backend?",
+        a: "Frontend state is usually in-memory for a single user session. Backend state must be persisted in a database and handle thousands of concurrent users.",
+        explanation: "Frontend apps (React/Redux) are ephemeral. Backend systems must be 'stateless' at the application layer to scale horizontally, relying on databases/caches for persistence.",
+        detailedExplanation: "The State Shift\n\nIn React, state is local to the browser. When the user refreshes, it's gone unless you saved it. On the backend, your server might be restarted or scaled to 10 instances. If instance A knows something that instance B doesn't, you have a problem.\n\nBackend engineering is largely about managing shared state across distributed systems. This is why databases, distributed locks, and atomic operations are critical concepts that frontend-only developers must master when shifting to the backend.",
+      }
+    ],
+    quiz: [
+      { question: "Why should backend services ideally be stateless?", options: ["To save memory", "To enable horizontal scaling", "Because databases are fast", "To prevent bugs"], correctIndex: 1, explanation: "Stateless services can be scaled easily because any instance can handle any request." }
+    ]
+  }
+];
+
+// ─── System Design ──────────────────────────────────────────────────────────
+MODULE_SECTIONS["System Design"] = [
+  {
+    title: "Scalable Architectures",
+    timeMinutes: 25,
+    coverImage: "/study-images/spring_boot.svg",
+    concepts: ["Load Balancing", "Caching (Redis/Memcached)", "Database Sharding", "Microservices vs Monolith"],
+    questions: [
+      {
+        q: "What is horizontal scaling vs vertical scaling?",
+        a: "Vertical: adding more power (CPU/RAM) to one server. Horizontal: adding more servers to a pool.",
+        explanation: "Horizontal scaling is preferred for web-scale apps because it avoids a single point of failure and has no theoretical upper limit.",
+        detailedExplanation: "Scaling Strategies\n\nVertical Scaling (Scaling Up) means increasing the capacity of a single machine. It's easy but has physical limits and creates a single point of failure.\n\nHorizontal Scaling (Scaling Out) means adding more machines to your infrastructure. This requires a Load Balancer (like Nginx or AWS ELB) to distribute traffic. It allows for high availability—if one server fails, others pick up the slack.\n\nMost modern cloud architectures (Kubernetes, AWS Auto Scaling) favor horizontal scaling. This requires the application to be 'stateless' so that any server can handle any request.",
+      },
+      {
+        q: "Explain the CAP Theorem.",
+        a: "A distributed system can only provide two of three: Consistency, Availability, and Partition Tolerance.",
+        explanation: "In a network partition, you must choose between Consistency (all nodes see same data) or Availability (every request gets a response).",
+        detailedExplanation: "The CAP Theorem\n\nConsistency: Every read receives the most recent write or an error.\nAvailability: Every request receives a (non-error) response, without the guarantee that it contains the most recent write.\nPartition Tolerance: The system continues to operate despite an arbitrary number of messages being dropped or delayed by the network between nodes.\n\nIn the real world, network partitions are inevitable. Therefore, you are usually choosing between CP (Consistency/Partition Tolerance) like HBase or MongoDB, or AP (Availability/Partition Tolerance) like Cassandra or DynamoDB.",
+      }
+    ],
+    quiz: [
+      { question: "Which is better for high availability?", options: ["Vertical Scaling", "Horizontal Scaling", "Single Server", "No Scaling"], correctIndex: 1, explanation: "Horizontal scaling provides redundancy and higher availability." },
+      { question: "CAP stands for:", options: ["Code, App, Program", "Consistency, Availability, Partition Tolerance", "Cloud, API, Platform", "Cache, Auth, Persist"], correctIndex: 1, explanation: "Consistency, Availability, and Partition Tolerance." },
+    ]
+  }
+];
+
+// ─── Java Foundations module (Tech Startup — Python bridging in explanations) ─
+MODULE_SECTIONS["Java Foundations"] = [
+  {
+    title: "Java Foundations",
+    timeMinutes: 20,
+    coverImage: "/study-images/oop_concepts.svg",
+    concepts: ["Java Type System", "JVM & Compilation", "Access Modifiers", "Null Safety & Optional", "Primitive Types & Autoboxing"],
+    questions: [
+      {
+        q: "How does Java's type system work?",
+        a: "Java is a statically typed language — every variable must declare its type at compile time. The compiler (javac) verifies types before the program ever runs, catching entire classes of bugs early.",
+        explanation: "You must declare types explicitly: int count = 0; String name = \"Alice\"; List<String> items = new ArrayList<>();. Java 10+ introduced var for local type inference (var list = new ArrayList<String>();) but types are still checked at compile time. Static typing enables better IDE support, refactoring, and prevents runtime type errors.",
+        detailedExplanation: "Java's type system — how it works\n\nEvery variable in Java has a declared type verified at compile time. This catches entire classes of bugs early and enables powerful IDE refactoring tools.\n\nPrimitive types (int, boolean, etc.) are stored directly in stack memory for raw performance, while reference types (String, List) hold pointers to objects on the heap.\n\nJava 10+ introduced 'var' for local type inference, which reduces boilerplate without sacrificing the safety of static typing.",
+        pythonBridgingNote: "Python determines types at runtime (dynamic). Java checks everything at compile time (static). This prevents most 'TypeError' bugs before they can ever run.",
+      },
+      {
+        q: "What are Java access modifiers and how do they enforce encapsulation?",
+        a: "Java has four access levels: public, protected, package-private, and private. They are enforced by the compiler to protect internal object state.",
+        explanation: "Private fields + public getters/setters is the standard pattern for safe encapsulation.",
+        detailedExplanation: "Java access modifiers — compile-time encapsulation\n\npublic: Accessible from anywhere. \nprivate: Accessible only within the same class (the strictest level). \nprotected: Accessible within the same package and by subclasses. \ndefault (no modifier): Accessible only within the same package.\n\nEncapsulation in Java is a hard rule—accessing a private field from outside causes a compilation error, forcing developers to use stable public APIs.",
+        pythonBridgingNote: "Python uses _prefix conventions for 'private' members. Java uses hard compiler rules—attempting to access a private member from outside is a build-blocking error.",
+      },
+      {
+        q: "What is null in Java and how do you handle it safely?",
+        a: "null is a reference that doesn't point to any object. Calling methods on it throws a NullPointerException (NPE). Use Optional<T> for safer handling.",
+        explanation: "NPE is the most common Java bug. Java 8's Optional forces callers to handle the absent case explicitly.",
+        detailedExplanation: "Null safety in Java\n\nnull means 'no object reference'. It is not an object itself. Calling methods on null results in a NullPointerException, which crashes the thread.\n\nModern Best Practices: Use Optional<T> to make the possibility of absence explicit in your API. Methods like Optional.ofNullable(val).orElse(\"default\") provide a functional, safe way to handle potential nulls without verbose if-checks.",
+        pythonBridgingNote: "Python's None is a singleton object; Java's null is a literal absence of a pointer. Optional<T> is similar to Python's typing.Optional but provides more functional methods like .map() and .filter().",
+      },
+      {
+        q: "What are Java's primitive types and how do they differ from reference types?",
+        a: "Java has 8 primitive types (int, long, etc.) stored directly in memory for speed. Reference types are objects stored on the heap.",
+        explanation: "Primitives are fast and memory-efficient. Use them whenever possible for numerical operations.",
+        detailedExplanation: "Primitive vs reference types in Java\n\nPrimitives: byte, short, int, long, float, double, boolean, char. They hold values directly, avoiding object overhead and garbage collection cycles.\n\nReference Types: Objects like String or ArrayList. They are stored on the heap and require a pointer to access. \n\nAutoboxing: Java automatically converts between int and Integer (wrapper), but this can add hidden overhead in performance-critical loops.",
+        pythonBridgingNote: "In Python, every number is a heavy object. In Java, primitives provide C-like performance for numeric tasks, making Java systems significantly faster for data-heavy processing.",
+      },
+    ],
+    quiz: [
+      { question: "In Java, what happens if you call a method on a null reference?", options: ["Returns null", "Returns 0", "NullPointerException is thrown", "Compilation error"], correctIndex: 2, explanation: "Calling any method on a null reference in Java throws a NullPointerException at runtime — not a compilation error." },
+      { question: "Which access modifier restricts access to the declaring class only?", options: ["protected", "package-private", "private", "internal"], correctIndex: 2, explanation: "private is the strictest Java access modifier — the field or method is accessible only within the class that declares it." },
+      { question: "Java's ArrayList<Integer> cannot directly store:", options: ["String objects", "null values", "primitive int", "wrapper Integer"], correctIndex: 2, explanation: "Java Collections require reference types. You cannot add a raw int — use Integer (autoboxing handles this automatically)." },
+      { question: "What does the var keyword do in Java 10+?", options: ["Declares a dynamic variable", "Infers the type at compile time", "Creates a mutable reference", "Bypasses the type system"], correctIndex: 1, explanation: "var is local variable type inference — the compiler determines the type at compile time. It does NOT make Java dynamic." },
+    ],
+  },
+  {
+    title: "Java Syntax Essentials",
+    timeMinutes: 25,
+    coverImage: "/study-images/oop_concepts.svg",
+    concepts: ["Variable Declarations & Type Inference", "Loops & Control Flow", "Exception Handling (Checked vs Unchecked)", "String & StringBuilder", "Arrays vs ArrayList"],
+    questions: [
+      {
+        q: "How does Java's exception handling work, and what is the difference between checked and unchecked exceptions?",
+        a: "Java uses try/catch/finally blocks. Checked exceptions (IOException, SQLException) must be declared with throws or caught — the compiler enforces this. Unchecked exceptions (NullPointerException, IllegalArgumentException) are RuntimeException subclasses and do not require declaration.",
+        explanation: "The exception hierarchy: Throwable → Error (JVM failures, don't catch) → Exception → RuntimeException (unchecked) | checked exceptions. Checked exceptions represent recoverable conditions. Unchecked exceptions represent programming bugs. Modern frameworks like Spring convert checked exceptions to unchecked for cleaner APIs.",
+        detailedExplanation: "Java exception handling — checked vs unchecked\n\ntry { ... } catch (IOException e) { ... } finally { ... } is the core syntax. finally runs regardless of whether an exception was thrown — used for cleanup (closing connections, releasing resources). Java 7+ introduced try-with-resources: try (FileInputStream f = new FileInputStream(path)) { ... } — resources are closed automatically.\n\nChecked exceptions: the compiler forces you to handle them. If you call a method that throws IOException, you must either surround it with try/catch or declare throws IOException in your method signature. Examples: IOException, SQLException, ParseException.\n\nUnchecked exceptions (RuntimeException subclasses): no declaration required. They represent programming errors — null dereference (NPE), out-of-bounds access, division by zero, illegal arguments. You can catch them, but the expectation is you fix the bug instead.\n\nBest practice: throw checked exceptions for conditions callers can reasonably recover from (file not found, network timeout). Throw unchecked exceptions for programming errors (invalid input, violated preconditions).",
+        pythonBridgingNote: "Python has only unchecked exceptions — the interpreter never forces you to handle them. Java's checked exceptions add compile-time safety but require more boilerplate. Many Java developers prefer unchecked-only APIs (Spring's approach) for cleaner code.",
+      },
+      {
+        q: "What are the different ways to iterate over a collection in Java?",
+        a: "Java provides four main iteration styles: enhanced for-each (for (String s : list)), traditional index loop (for (int i = 0; i < list.size(); i++)), Iterator (safe removal during iteration), and the Stream API (list.stream().filter().map().collect()) for functional-style processing.",
+        explanation: "Enhanced for-each is cleanest for simple traversal. Use index loops when you need the position. Use Iterator.remove() for safe removal during iteration (avoids ConcurrentModificationException). Use Streams for filtering, transforming, and collecting in a declarative pipeline.",
+        detailedExplanation: "Java collection iteration patterns\n\nEnhanced for-each: for (String name : nameList) { System.out.println(name); } — clean, preferred for simple traversal. No index access. Works on any Iterable.\n\nIndex-based loop: for (int i = 0; i < list.size(); i++) { list.get(i); } — use when you need the index or need to modify elements at specific positions.\n\nIterator: Iterator<String> it = list.iterator(); while (it.hasNext()) { String s = it.next(); if (s.isEmpty()) it.remove(); } — the only safe way to remove elements during iteration.\n\nStream API (Java 8+): functional, declarative, composable.\n  list.stream()\n      .filter(s -> s.length() > 3)\n      .map(String::toUpperCase)\n      .sorted()\n      .collect(Collectors.toList());\nSupports parallelism with .parallelStream(). Lazy evaluation — intermediate operations run only when a terminal operation (collect, forEach, count) triggers the pipeline.",
+        pythonBridgingNote: "Python's for item in list is closest to Java's enhanced for-each. Python list comprehensions [s.upper() for s in names if len(s) > 3] map directly to Java Stream pipelines: stream().filter(s -> s.length() > 3).map(String::toUpperCase).collect(Collectors.toList()).",
+      },
+    ],
+    quiz: [
+      { question: "Which exception type MUST be caught or declared with 'throws'?", options: ["RuntimeException", "NullPointerException", "Checked exceptions (e.g. IOException)", "Error"], correctIndex: 2, explanation: "Checked exceptions (like IOException) must be handled at compile time — either caught or declared with throws in the method signature." },
+      { question: "Which iteration method allows safe element removal during traversal?", options: ["Enhanced for-each", "Stream API", "Index-based for loop", "Iterator with it.remove()"], correctIndex: 3, explanation: "Iterator.remove() is the only safe way to remove elements during iteration. Modifying a collection directly inside a for-each loop throws ConcurrentModificationException." },
+      { question: "Java's Stream filter() is functionally similar to:", options: ["A for-each loop", "A while loop", "A predicate-based filter applied to each element", "An index-based removal"], correctIndex: 2, explanation: "filter() takes a Predicate<T> and keeps only elements that match the condition — equivalent to filtering with a conditional in a loop, but declarative." },
+    ],
+    codingMocks: [
+      {
+        question: "FizzBuzz",
+        difficulty: "Easy",
+        description: "Write a Java program that prints numbers from 1 to N.\n\nFor multiples of 3, print **Fizz** instead.\nFor multiples of 5, print **Buzz** instead.\nFor multiples of both 3 and 5, print **FizzBuzz**.",
+        hint: "Use the modulo operator (%). Check divisibility by 15 first (both 3 and 5), then by 3, then by 5.",
+        examples: [
+          { input: "15", output: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz", explanation: "Numbers 1-15 with Fizz/Buzz replacements." },
+        ],
+        constraints: ["1 ≤ N ≤ 100"],
+        templates: [
+          {
+            id: 62, label: "Java", monacoLang: "java",
+            code: `import java.util.Scanner;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        int n = sc.nextInt();\n        // Your solution here\n        for (int i = 1; i <= n; i++) {\n            // TODO: print Fizz, Buzz, FizzBuzz, or i\n        }\n    }\n}\n`
+          },
+          {
+            id: 71, label: "Python", monacoLang: "python",
+            code: `import sys\nn = int(sys.stdin.read().strip())\nfor i in range(1, n + 1):\n    # Your solution here\n    pass\n`
+          },
+        ],
+        testCases: [
+          { label: "N=5", input: "5", expected: "1\n2\nFizz\n4\nBuzz" },
+          { label: "N=15", input: "15", expected: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz" },
+        ],
+      },
+    ],
+  },
+];
+
+// ─── Java Backend (Tech Startup) — extra coding section ─────────────────────
+MODULE_SECTIONS["Java Backend Coding"] = [
+  {
+    title: "String Manipulation in Java",
+    timeMinutes: 30,
+    coverImage: "/study-images/dsa_algorithms.png",
+    concepts: ["String Reversal", "Palindrome Detection", "StringBuilder"],
+    questions: [],
+    quiz: [],
+    codingMocks: [
+      {
+        question: "Reverse a String",
+        difficulty: "Easy",
+        description: "Given a string s, return the string reversed.\n\nDo NOT use built-in reverse functions — implement manually.",
+        hint: "Use two pointers or a StringBuilder. Iterate from the end to the beginning.",
+        examples: [
+          { input: "hello", output: "olleh" },
+          { input: "Java", output: "avaJ" },
+        ],
+        constraints: ["1 ≤ s.length ≤ 10⁴", "s contains printable ASCII characters"],
+        templates: [
+          {
+            id: 62, label: "Java", monacoLang: "java",
+            code: `import java.util.Scanner;\npublic class Main {\n    public static String reverse(String s) {\n        // Your solution here\n        return \"\";\n    }\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String s = sc.nextLine().trim();\n        System.out.println(reverse(s));\n    }\n}\n`
+          },
+          {
+            id: 71, label: "Python", monacoLang: "python",
+            code: `import sys\ns = sys.stdin.read().strip()\ndef reverse(s):\n    # Your solution here\n    return \"\"\nprint(reverse(s))\n`
+          },
+        ],
+        testCases: [
+          { label: "Case 1", input: "hello", expected: "olleh" },
+          { label: "Case 2", input: "Java", expected: "avaJ" },
+          { label: "Case 3", input: "a", expected: "a" },
+          { label: "Case 4", input: "racecar", expected: "racecar" },
+        ],
+      },
+    ],
+  },
+];
+
 function getSections(title: string): Section[] {
   if (MODULE_SECTIONS[title] && MODULE_SECTIONS[title].length > 0) return MODULE_SECTIONS[title];
   return [{
@@ -526,7 +865,120 @@ const ALL_PLANS = [
   { id: "tcs", company: "TCS", role: "Java Backend Dev", expiry: "Mar 25", expiryFull: "Mar 25, 2026", expired: false },
   { id: "google", company: "Google", role: "SDE Intern", expiry: "Apr 2", expiryFull: "Apr 2, 2026", expired: false },
   { id: "wipro", company: "Wipro", role: "Full Stack Dev", expiry: "Mar 15", expiryFull: "Mar 15, 2026", expired: true },
+  { id: "tech-startup", company: "Tech Startup", role: "Java Backend Developer", expiry: "Mar 25", expiryFull: "Mar 25, 2026", expired: false },
 ];
+
+type StudyPlanMeta = (typeof ALL_PLANS)[number];
+
+function getModulesForCompany(company: string, primarySkill: string, role?: string) {
+  // Named company plans take priority (hardcoded presets)
+  if (PLAN_MODULES[company]) return PLAN_MODULES[company];
+
+  const sk = primarySkill.trim().toLowerCase();
+  const rl = (role || "").trim().toLowerCase();
+
+  // ── Detect source (student's skill) ───────────────────────────
+  const isPython   = sk.includes("python");
+  const isJava     = sk.includes("java");
+  const isFrontend = sk.includes("frontend") || sk.includes("react") ||
+                     sk.includes("javascript") || sk.includes("angular") || sk.includes("vue");
+  const isBackend  = sk.includes("backend") || sk.includes("node") ||
+                     sk.includes("django") || sk.includes("spring");
+
+  // ── Detect target (job role) ───────────────────────────────────
+  const wantsJava    = rl.includes("java");
+  const wantsPython  = rl.includes("python");
+  const wantsBackend = rl.includes("backend");
+  const wantsFront   = rl.includes("frontend");
+
+  // ── Scenario 1: Python Developer → Java role (inline comparisons in first module) ─
+  if (isPython && (wantsJava || wantsBackend)) {
+    return [
+      { title: "Java Foundations", sub: "Types, OOP, Syntax — with Python comparisons", progress: 0, color: "#22c55e" },
+      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#3b82f6" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
+      { title: "Java Backend Coding", sub: "Live Sandbox, Test Cases", progress: 0, color: "#a78bfa" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Scenario 2: Java Developer → Java role (POLISH) ───────────
+  if (isJava && (wantsJava || wantsBackend)) {
+    return [
+      { title: "Java Foundations", sub: "OOP, Collections, Streams", progress: 0, color: "#22c55e" },
+      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#3b82f6" },
+      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#f59e0b" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+      { title: "Java Backend Coding", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Scenario 3: Java Developer → Python role (TRANSITION) ─────
+  if (isJava && wantsPython) {
+    return [
+      { title: "Java to Python Transition", sub: "Syntax, Typing, Paradigm Shift", progress: 0, color: "#22c55e" },
+      { title: "Python fundamentals", sub: "OOP, Data Structures, Exceptions", progress: 0, color: "#3b82f6" },
+      { title: "SQL + database design", sub: "Queries, Joins, Aggregation", progress: 0, color: "#f59e0b" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Scenario 4: Python Developer → Python role (POLISH) ───────
+  if (isPython && wantsPython) {
+    return [
+      { title: "Python fundamentals", sub: "OOP, Data Structures, Exceptions", progress: 0, color: "#22c55e" },
+      { title: "SQL + database design", sub: "Queries, Joins, Aggregation", progress: 0, color: "#3b82f6" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Scenario 5: Frontend Developer → Backend role (TRANSITION) ─
+  if (isFrontend && wantsBackend) {
+    return [
+      { title: "Frontend to Backend Shift", sub: "Server-side thinking, APIs, Auth", progress: 0, color: "#22c55e" },
+      { title: "Java Foundations", sub: "OOP, Collections, Streams", progress: 0, color: "#3b82f6" },
+      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#f59e0b" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+      { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Scenario 6: Backend Developer → Backend role (POLISH) ─────
+  if (isBackend && wantsBackend) {
+    return [
+      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#22c55e" },
+      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#3b82f6" },
+      { title: "System Design", sub: "Scalability, CAP, Databases", progress: 0, color: "#f59e0b" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+      { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Frontend → Frontend (same stack polish) ────────────────────
+  if (isFrontend && wantsFront) {
+    return [
+      { title: "Java / Python fundamentals", sub: "OOP, Collections, Streams", progress: 0, color: "#22c55e" },
+      { title: "Algorithms & Data Structures", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#3b82f6" },
+      { title: "System Design", sub: "Scalability, CAP, Databases", progress: 0, color: "#f59e0b" },
+      { title: "Behavioral preparation", sub: "STAR method, Leadership", progress: 0, color: "#e2e8f0" },
+      { title: "Mock interviews", sub: "Technical, HR, Case", progress: 0, color: "#e2e8f0" },
+    ];
+  }
+
+  // ── Generic fallback ──────────────────────────────────────────
+  return [
+    { title: `${primarySkill || "Core"} fundamentals`, sub: "Concepts, Problem Solving", progress: 0, color: "#22c55e" },
+    { title: "SQL + database design", sub: "Joins, Indexing", progress: 0, color: "#3b82f6" },
+    { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
+    { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+    { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+  ];
+}
 
 function toPoints(text: string): string[] {
   if (!text) return [];
@@ -689,9 +1141,10 @@ interface QuestionSlideProps {
   onCompleteSection: () => void;
   direction: "right" | "left";
   sectionTitle: string;
+  primarySkill: string;
 }
 
-function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, hasQuiz, onGoToQuiz, onCompleteSection, direction, sectionTitle }: QuestionSlideProps) {
+function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, hasQuiz, onGoToQuiz, onCompleteSection, direction, sectionTitle, primarySkill }: QuestionSlideProps) {
   const animClass = direction === "right" ? "slide-enter-right" : "slide-enter-left";
 
   return (
@@ -743,24 +1196,36 @@ function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, 
             return (
               <div>
                 {/* Heading with purple left border */}
-                <div style={{ borderLeft: `3px solid ${C.purple}`, paddingLeft: 12, marginBottom: 12 }}>
+                <div style={{ borderLeft: `3.5px solid ${C.purple}`, paddingLeft: 12, marginBottom: 12 }}>
                   <h4 className="text-[14px] font-bold" style={{ color: C.heading, fontFamily: "var(--font-playfair), 'Playfair Display', serif", margin: 0 }}>
                     {heading}
                   </h4>
                 </div>
 
                 {/* Bullet points — one per paragraph */}
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} className="space-y-2">
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} className="space-y-2.5">
                   {bodyParagraphs.map((para, pi) => (
                     <li key={pi} className="flex items-start gap-2.5">
                       <span className="shrink-0 rounded-full mt-[6px]"
                         style={{ width: 6, height: 6, background: POINT_COLORS[pi % POINT_COLORS.length], flexShrink: 0 }} />
-                      <p className="text-[12px] leading-[1.65]" style={{ color: C.body, margin: 0 }}>
+                      <p className="text-[12px] leading-[1.6]" style={{ color: C.body, margin: 0 }}>
                         {para}
                       </p>
                     </li>
                   ))}
                 </ul>
+
+                {/* Bridging note — only shown when student is transitioning languages */}
+                {question.pythonBridgingNote && primarySkill.toLowerCase() !== "java" && (
+                  <div style={{ marginTop: 16, background: '#f5f3ff', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #8b5cf6' }}>
+                    <p className="text-[10.5px] font-extrabold uppercase tracking-widest" style={{ color: '#7c3aed', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <IconLightbulb size={12} color="#7c3aed" /> {`If you\'re coming from ${primarySkill}`}
+                    </p>
+                    <p className="text-[11.5px] font-medium leading-[1.6]" style={{ color: '#4b5563', margin: 0 }}>
+                      {question.pythonBridgingNote}
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })() : (
@@ -772,7 +1237,7 @@ function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, 
                   {points.map((item, pi) => (
                     <li key={pi} className="flex items-start gap-2.5">
                       <span className="mt-[6px] shrink-0 rounded-full" style={{ width: 6, height: 6, background: item.color }} />
-                      <p className="text-[12px] leading-[1.65]" style={{ color: C.body, margin: 0 }}>
+                      <p className="text-[12px] leading-[1.6]" style={{ color: C.body, margin: 0 }}>
                         {item.text}
                       </p>
                     </li>
@@ -1727,8 +2192,13 @@ export default function StudyPlanPage() {
   // ── SCORM state ──────────────────────────────────────────────
   const [scormLoading, setScormLoading] = useState(true);
   const [passedSet, setPassedSet] = useState<Set<string>>(new Set());
+  const [dynamicPlan, setDynamicPlan] = useState<PlanDetailResponse | null>(null);
+  const [targetId, setTargetId] = useState<number | null>(null);
   const [studentId, setStudentId] = useState<number | null>(null);
   const [planId, setPlanId] = useState<number | null>(null);
+  const [primarySkill, setPrimarySkill] = useState("General");
+  const [activeRole, setActiveRole] = useState("");
+  const [availablePlans, setAvailablePlans] = useState<StudyPlanMeta[]>(ALL_PLANS);
   const sectionStartRef = useRef<number>(Date.now());
 
   // ── Quiz countdown timer ─────────────────────────────────────
@@ -1748,30 +2218,63 @@ export default function StudyPlanPage() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // ── Boot: load student_id, plan_id, then SCORM progress ──────
+  // ── Boot: load student_id, then SCORM progress ──────
   useEffect(() => {
     const sid = Number(sessionStorage.getItem("student_id"));
-    const tid = Number(sessionStorage.getItem("target_id"));
     const storedCompany = sessionStorage.getItem("company_name") ?? "";
+    const storedRole = sessionStorage.getItem("role") ?? "";
+    const storedPrimarySkill = sessionStorage.getItem("primary_skill") ?? "General";
 
     if (!sid) { setScormLoading(false); return; }
     setStudentId(sid);
+    setPrimarySkill(storedPrimarySkill);
+    setActiveRole(storedRole);
 
+    let currentPlanId = 1; // Default
     if (storedCompany) {
       const matched = ALL_PLANS.find(p => p.company.toLowerCase() === storedCompany.toLowerCase());
-      if (matched) setSelectedPlanId(matched.id);
+      if (matched) {
+        setSelectedPlanId(matched.id);
+        // Use a deterministic integer for planId based on company for scorm mocking
+        currentPlanId = ALL_PLANS.indexOf(matched) + 1;
+      } else {
+        const dynamicPlan: StudyPlanMeta = {
+          id: `active-${storedCompany.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          company: storedCompany,
+          role: storedRole || `${storedPrimarySkill} Track`,
+          expiry: "Active",
+          expiryFull: "Active target",
+          expired: false,
+        };
+        setAvailablePlans([dynamicPlan, ...ALL_PLANS]);
+        setSelectedPlanId(dynamicPlan.id);
+        currentPlanId =
+          [...storedCompany].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) + 100;
+      }
+    }
+    setPlanId(currentPlanId);
+
+    // ── New: Fetch actual AI-generated plan from backend ──
+    const storedTargetId = sessionStorage.getItem("target_id");
+    if (sid && storedTargetId) {
+      const tId = Number(storedTargetId);
+      setTargetId(tId);
+      getLatestPrep(sid, tId)
+        .then(plan => {
+          console.log("Fetched dynamic AI plan:", plan);
+          setDynamicPlan(plan);
+        })
+        .catch(err => {
+          console.warn("Could not fetch AI plan (fallback to hardcoded):", err);
+        });
     }
 
-    if (!tid) { setScormLoading(false); return; }
-
-    getLatestPrep(sid, tid)
-      .then(async (plan) => {
-        const pid = plan.plan_id;
-        setPlanId(pid);
-        const [summary, progress] = await Promise.all([
-          fetchScormSummary(sid, pid).catch(() => null),
-          fetchScormProgress(sid, pid).catch(() => ({ sections: [] as ScormSectionItem[] })),
-        ]);
+    // Fetch SCORM progress directly without requiring backend plan generation
+    Promise.all([
+      fetchScormSummary(sid, currentPlanId).catch(() => null),
+      fetchScormProgress(sid, currentPlanId).catch(() => ({ sections: [] as ScormSectionItem[] })),
+    ])
+      .then(([summary, progress]) => {
         const rows = progress.sections;
         const ps = buildPassedSet(rows);
         setPassedSet(ps);
@@ -1785,9 +2288,26 @@ export default function StudyPlanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const activePlan = ALL_PLANS.find(p => p.id === selectedPlanId) ?? ALL_PLANS[0];
-  const modules = PLAN_MODULES[activePlan.company] ?? PLAN_MODULES["TCS"];
+  const activePlan = availablePlans.find(p => p.id === selectedPlanId) ?? availablePlans[0];
+  let modules = getModulesForCompany(activePlan.company, primarySkill, activeRole);
+  
+  // Inject Dynamic AI Roadmap as the first module if available
+  if (dynamicPlan && dynamicPlan.plan_json) {
+    const aiModule = {
+      title: "Strategic AI Roadmap",
+      sub: "AI-generated personalized strategy",
+      progress: 0,
+      color: "#8b5cf6", // Purple for AI
+      isAI: true
+    };
+    // Don't duplicate if already injected
+    if (!modules.some(m => m.title === "Strategic AI Roadmap")) {
+      modules = [aiModule, ...modules];
+    }
+  }
+
   const currentModule = modules[selectedModuleIdx];
+  const isAIModule = (currentModule as any)?.isAI;
   const sections = getSections(currentModule?.title || "");
 
   // ── Restore per-section completion when module/plan changes ──
@@ -1825,7 +2345,7 @@ export default function StudyPlanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSectionIdx]);
 
-  const handleSelectPlan = (plan: typeof ALL_PLANS[0]) => {
+  const handleSelectPlan = (plan: StudyPlanMeta) => {
     if (plan.expired) return;
     setSelectedPlanId(plan.id);
     setSelectedModuleIdx(0);
@@ -1995,7 +2515,7 @@ export default function StudyPlanPage() {
                 <p className="text-[14px] font-bold" style={{ color: C.heading }}>{activePlan.role}</p>
               </div>
             </div>
-            {ALL_PLANS.filter(p => !p.expired).map(plan => (
+            {availablePlans.filter(p => !p.expired).map(plan => (
               <button key={plan.id} onClick={() => handleSelectPlan(plan)}
                 className="shrink-0 rounded-xl border px-4 py-2.5 transition-all text-left"
                 style={{ borderColor: plan.id === selectedPlanId ? C.purple : C.border, background: plan.id === selectedPlanId ? C.purpleBg : C.card }}>
@@ -2103,7 +2623,9 @@ export default function StudyPlanPage() {
             {/* ═══ CENTER: Content Area — FIXED, NO OUTER SCROLL ═══ */}
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-              {moduleComplete ? (
+              {isAIModule && dynamicPlan ? (
+                <AIRoadmapView plan={dynamicPlan} />
+              ) : moduleComplete ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border" style={{ borderColor: C.border, background: C.card }}>
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: C.greenLight }}>
                     <IconCheck size={28} color={C.green} />
@@ -2156,6 +2678,7 @@ export default function StudyPlanPage() {
                               onCompleteSection={handleProceed}
                               direction={slideDirection}
                               sectionTitle={currentSection?.title || ""}
+                              primarySkill={primarySkill}
                             />
                           );
                         })()}

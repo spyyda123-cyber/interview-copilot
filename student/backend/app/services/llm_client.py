@@ -167,7 +167,7 @@ def build_learning_plan_prompt(context: dict) -> str:
     Only used when LLM_PROVIDER=gemini. OpenAI path builds its own
     user message internally in openai_client.py.
 
-    Also injects cross-language transition context (Section 9).
+    Also injects cross-language transition context (Section 5).
     """
     prompt_path = PROMPTS_DIR / "system_prompt.txt"
     try:
@@ -193,9 +193,9 @@ def build_learning_plan_prompt(context: dict) -> str:
     missing_skills  = context.get("missing_skills", [])
     keyword_score   = context.get("keyword_score", 0)
 
-    resume_context       = context.get("resume_context", "Not available")
-    profile_context      = context.get("profile_context", "Not available")
-    company_intelligence = context.get("company_context", "No company interview intelligence available")
+    resume_context       = context.get("resume_context", "Not available")[:1500]  # Limit to 1500 chars
+    profile_context      = context.get("profile_context", "Not available")[:800]
+    company_intelligence = context.get("company_context", "No company interview intelligence available")[:1500]
 
     known_skills_limited = known_skills[:15] if isinstance(known_skills, list) else []
     skills_lines = []
@@ -231,11 +231,11 @@ def build_learning_plan_prompt(context: dict) -> str:
     if proficient_langs and target_langs:
         transitions = [f"{p} → {t}" for p in proficient_langs for t in target_langs if p.lower() != t.lower()]
         if transitions:
-            lang_lines.append(f"* Active Transitions: {', '.join(transitions)} — Apply Section 9.")
+            lang_lines.append(f"* Active Transitions: {', '.join(transitions)} — Embed comparison study INLINE within relevant task descriptions on Day 1-2 only (see system prompt Section 5). Do NOT create a separate transition day or module.")
         else:
             lang_lines.append("* No transition needed.")
     else:
-        lang_lines.append("* No transition detected — skip Section 9.")
+        lang_lines.append("* No language transition detected — skip Section 5.")
     lang_block = "\n".join(lang_lines)
 
     user_prompt = f"""STUDENT PROFILE:
@@ -277,7 +277,7 @@ COMPANY INTERVIEW INTELLIGENCE:
 
 TASK:
 Create a day-by-day interview preparation strategy.
-If a language transition is detected above, apply Section 9 cross-language analogy teaching.
+If a language transition is detected above, embed Python/Java comparison study INLINE within relevant task descriptions (NOT as a separate day or module). See system prompt Section 5 for the exact format.
 
 Rules:
 * Prioritize missing skills and Beginner-proficiency required skills FIRST (disqualifiers)

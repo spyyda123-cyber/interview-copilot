@@ -2,89 +2,120 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import FeedbackModal from "../components/FeedbackModal";
+import LoadingSpinner from "../components/LoadingSpinner";
 import {
   getFeedbackByCompany,
+  getStudentApplications,
+  activateCompany,
   type PendingFeedbackItem,
   type FeedbackResponse,
+  type ApplicationItem,
 } from "@/src/lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+// Helper to get the student's latest resume_id from the backend
+async function fetchLatestResumeId(studentId: number): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/resume/latest?student_id=${studentId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.resume_id ?? data?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const PROFICIENCY_OPTIONS = ["Beginner", "Intermediate", "Advanced"];
 const COMMON_SKILLS = ["Java", "Python", "SQL", "REST APIs", "React", "Node.js", "C++", "AWS"];
 
-const APPROVED_INTERVIEWS = [
-  {
-    id: 1,
-    company: "TCS",
-    role: "Java Backend Developer",
-    details: "Mar 25, 2026 · Full-time · 3.5-7 LPA",
-    shortDetails: "Mar 25 · 3.5-7 LPA",
-    logoText: "T",
-    logoColor: "bg-[#1e3a8a]",
-    interviewDate: "2026-03-25",
-  },
-  {
-    id: 2,
-    company: "Google",
-    role: "SDE Intern",
-    details: "Apr 2, 2026 · Internship · 12-18 LPA",
-    shortDetails: "Apr 2 · 12-18 LPA",
-    logoText: "G",
-    logoColor: "bg-[#ea4335]",
-    interviewDate: "2026-04-02",
-  },
-  {
-    id: 3,
-    company: "Infosys",
-    role: "Systems Engineer",
-    details: "Apr 10, 2026 · Full-time · 3.6-5 LPA",
-    shortDetails: "Apr 10 · 3.6-5 LPA",
-    logoText: "I",
-    logoColor: "bg-[#0ea5e9]",
-    interviewDate: "2026-04-10",
-  },
-];
-
-const PENDING_INTERVIEWS = [
-  {
-    id: 4,
-    company: "Wipro",
-    role: "Full Stack Dev",
-    shortDetails: "Apr 15 · 3.5-6 LPA",
-    logoText: "W",
-    logoColor: "bg-[#a855f7]",
-  },
-];
-
 export default function InterviewsPage() {
   const router = useRouter();
-  const [selectedInterview, setSelectedInterview] = useState<typeof APPROVED_INTERVIEWS[0] | null>(null);
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [applications, setApplications] = useState<ApplicationItem[]>([]);
+  const [selectedInterview, setSelectedInterview] = useState<ApplicationItem | null>(null);
   const [skills, setSkills] = useState<{skill: string, proficiency: string}[]>([]);
   const [currentSkill, setCurrentSkill] = useState("");
   const [currentProficiency, setCurrentProficiency] = useState(PROFICIENCY_OPTIONS[0]);
   const [feedbackModal, setFeedbackModal] = useState<{ interview: PendingFeedbackItem } | null>(null);
   const [feedbackMap, setFeedbackMap] = useState<Record<string, FeedbackResponse[]>>({});
   const [viewingFeedback, setViewingFeedback] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    // When opening page, load skills from session if any exist
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedInterview) return;
+    const mainContent = document.querySelector(".main-content");
+    if (!mainContent) return;
+    mainContent.classList.add("modal-scroll-lock");
+    return () => mainContent.classList.remove("modal-scroll-lock");
+  }, [selectedInterview]);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        const studentIdStr = sessionStorage.getItem("student_id");
+        if (!studentIdStr) {
+          router.replace("/login");
+          return;
+        }
+        const studentId = Number(studentIdStr);
+        const res = await getStudentApplications(studentId);
+        setApplications(res.applications);
+      } catch (err) {
+        console.error("Failed to fetch applications:", err);
+        setError("Failed to load your interview list.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchApplications();
+
+    // Load skills — prefer sessionStorage, then derive from student's primary skill
     const storedSkills = sessionStorage.getItem("known_skills_detailed");
     if (storedSkills) {
       try {
         setSkills(JSON.parse(storedSkills));
       } catch (e) {}
     } else {
-      // Dummy baseline if empty for mockup purposes
-      setSkills([
-        { skill: "Java", proficiency: "Advanced" },
-        { skill: "SQL", proficiency: "Intermediate" },
-        { skill: "REST APIs", proficiency: "Advanced" },
-        { skill: "Python", proficiency: "Beginner" }
-      ]);
+      // Build default skills based on the student's primary_skill from their profile
+      const storedPrimary = (sessionStorage.getItem("primary_skill") || "").toLowerCase();
+      if (storedPrimary.includes("python")) {
+        setSkills([
+          { skill: "Python", proficiency: "Advanced" },
+          { skill: "SQL", proficiency: "Intermediate" },
+        ]);
+      } else if (storedPrimary.includes("frontend") || storedPrimary.includes("react") || storedPrimary.includes("javascript")) {
+        setSkills([
+          { skill: "JavaScript", proficiency: "Advanced" },
+          { skill: "React", proficiency: "Advanced" },
+          { skill: "SQL", proficiency: "Intermediate" },
+        ]);
+      } else if (storedPrimary.includes("backend")) {
+        setSkills([
+          { skill: "Backend", proficiency: "Advanced" },
+          { skill: "SQL", proficiency: "Intermediate" },
+        ]);
+      } else {
+        // Java or unknown → default to Java
+        setSkills([
+          { skill: "Java", proficiency: "Advanced" },
+          { skill: "SQL", proficiency: "Intermediate" },
+        ]);
+      }
     }
-  }, []);
+  }, [router]);
 
-  const handleActivateClick = (interview: typeof APPROVED_INTERVIEWS[0]) => {
+  const handleActivateClick = (interview: ApplicationItem) => {
     setSelectedInterview(interview);
   };
 
@@ -92,15 +123,45 @@ export default function InterviewsPage() {
     setSelectedInterview(null);
   };
 
-  const handleConfirmActivate = () => {
-    // Save updated skills and mock transition
-    sessionStorage.setItem("known_skills_detailed", JSON.stringify(skills));
-    sessionStorage.setItem("company_name", selectedInterview!.company);
-    sessionStorage.setItem("role", selectedInterview!.role);
-    closeModal();
-    // In a real flow, this would call an API and then forward them to study plan or target
-    // For now we'll route to /study-plan as mock behavior
-    router.push("/study-plan");
+  const [activating, setActivating] = useState(false);
+
+  const handleConfirmActivate = async () => {
+    if (!selectedInterview) return;
+    try {
+      setActivating(true);
+      const studentId = Number(sessionStorage.getItem("student_id"));
+      
+      // Activate company - response includes target_id from backend
+      const activateResult = await activateCompany(studentId, selectedInterview.company_id);
+      
+      // Save updated skills and context
+      sessionStorage.setItem("known_skills_detailed", JSON.stringify(skills));
+      sessionStorage.setItem("company_name", selectedInterview.company_name);
+      sessionStorage.setItem("role", selectedInterview.role);
+      
+      // CRITICAL FIX: Set target_id from activation response (was previously being removed!)
+      if (activateResult && (activateResult as any).target_id) {
+        sessionStorage.setItem("target_id", String((activateResult as any).target_id));
+      }
+
+      // Fetch and store resume_id so /plan page can load
+      const resumeId = await fetchLatestResumeId(studentId);
+      if (resumeId) {
+        sessionStorage.setItem("resume_id", String(resumeId));
+      }
+
+      // Save primary skill for study plan module selection
+      const primarySkill = skills.length > 0 ? skills[0].skill : "General";
+      sessionStorage.setItem("primary_skill", primarySkill);
+
+      closeModal();
+      
+      // Navigate to the interactive study plan (Q&A, quiz, coding)
+      router.push("/study-plan");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to activate company");
+      setActivating(false);
+    }
   };
 
   const updateSkillProficiency = (skillName: string, newProf: string) => {
@@ -124,6 +185,24 @@ export default function InterviewsPage() {
     return "bg-amber-50 text-amber-700";
   };
 
+  const pendingApprovals = applications.filter(a => a.application_status === "INTERESTED");
+  const approvedInterviews = applications.filter(a => a.application_status === "APPROVED");
+  const rejectedInterviews = applications.filter(a => a.application_status === "REJECTED");
+  const activatedInterviews = applications.filter(a => a.application_status === "ACTIVATED");
+
+  if (loading) {
+    return (
+      <div className="flex flex-col justify-center items-center h-64">
+        <LoadingSpinner />
+        <p className="mt-4 text-slate-500 font-medium">Loading interviews...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200">{error}</div>;
+  }
+
   return (
     <div className="animate-fade-in w-full max-w-4xl mx-auto py-4 relative">
       <div className="flex justify-between items-center mb-6">
@@ -137,19 +216,19 @@ export default function InterviewsPage() {
       <div className="grid grid-cols-4 gap-4 mb-8">
         <div className="bg-white border-l-4 border-l-emerald-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Active (Approved)</p>
-          <p className="text-3xl font-light text-emerald-700">3</p>
+          <p className="text-3xl font-light text-emerald-700">{approvedInterviews.length}</p>
         </div>
         <div className="bg-white border-l-4 border-l-amber-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Pending Approval</p>
-          <p className="text-3xl font-light text-amber-700">1</p>
+          <p className="text-3xl font-light text-amber-700">{pendingApprovals.length}</p>
         </div>
         <div className="bg-white border-l-4 border-l-red-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Rejected</p>
-          <p className="text-3xl font-light text-red-600">1</p>
+          <p className="text-3xl font-light text-red-600">{rejectedInterviews.length}</p>
         </div>
         <div className="bg-white border-l-4 border-l-indigo-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Activated</p>
-          <p className="text-3xl font-light text-indigo-700">0</p>
+          <p className="text-3xl font-light text-indigo-700">{activatedInterviews.length}</p>
         </div>
       </div>
 
@@ -159,27 +238,33 @@ export default function InterviewsPage() {
         <p className="text-sm text-slate-500 mb-4">Activated companies move to Study Plan and disappear from here.</p>
         
         <div className="space-y-3">
-          {APPROVED_INTERVIEWS.map((interview) => {
-            const isPast = new Date(interview.interviewDate) < new Date();
-            const hasFeedback = feedbackMap[interview.company]?.length > 0;
+          {approvedInterviews.length === 0 && (
+            <p className="text-sm text-slate-500">No approved companies yet.</p>
+          )}
+          {approvedInterviews.map((interview) => {
+            const isPast = interview.interview_date ? new Date(interview.interview_date) < new Date() : false;
+            const hasFeedback = feedbackMap[interview.company_name]?.length > 0;
             return (
-            <div key={interview.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between transition hover:shadow-md">
+            <div key={interview.application_id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between transition hover:shadow-md">
               <div className="flex items-center gap-4">
-                <div className={`flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold text-xl ${interview.logoColor}`}>
-                  {interview.logoText}
+                <div className={`flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold text-xl bg-[#1e3a8a]`}>
+                  {interview.company_name[0]}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>
-                    {interview.company} — {interview.role}
+                    {interview.company_name} — {interview.role}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">{interview.shortDetails}</p>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {interview.interview_date ? new Date(interview.interview_date).toLocaleDateString() : "TBD"}
+                    {interview.package_min ? ` · ${interview.package_min}-${interview.package_max} LPA` : ""}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {isPast && (
                   hasFeedback ? (
                     <button
-                      onClick={() => setViewingFeedback(viewingFeedback === interview.company ? null : interview.company)}
+                      onClick={() => setViewingFeedback(viewingFeedback === interview.company_name ? null : interview.company_name)}
                       className="px-4 py-2 rounded-xl text-indigo-700 border border-indigo-200 bg-indigo-50 font-bold text-sm hover:bg-indigo-100 transition flex items-center gap-1.5"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -192,9 +277,9 @@ export default function InterviewsPage() {
                     <button
                       onClick={() => setFeedbackModal({
                         interview: {
-                          company_name: interview.company,
+                          company_name: interview.company_name,
                           role: interview.role,
-                          interview_date: interview.interviewDate,
+                          interview_date: interview.interview_date || new Date().toISOString(),
                         },
                       })}
                       className="px-4 py-2 rounded-xl text-amber-700 border border-amber-200 bg-amber-50 font-bold text-sm hover:bg-amber-100 transition flex items-center gap-1.5"
@@ -209,7 +294,7 @@ export default function InterviewsPage() {
                 )}
                 <button 
                   onClick={() => handleActivateClick(interview)}
-                  className="px-6 py-2 rounded-xl text-slate-800 border border-slate-300 font-bold text-sm hover:bg-slate-50 transition"
+                  className="px-6 py-2 rounded-xl text-slate-800 border border-slate-300 font-bold text-sm hover:bg-slate-50 transition flex items-center gap-2"
                 >
                   Activate
                 </button>
@@ -225,17 +310,23 @@ export default function InterviewsPage() {
         <h2 className="text-base font-bold text-slate-800 mb-3" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>Pending approval</h2>
         
         <div className="space-y-3">
-          {PENDING_INTERVIEWS.map((interview) => (
-            <div key={interview.id} className="bg-[var(--bg-muted)] opacity-80 rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+          {pendingApprovals.length === 0 && (
+            <p className="text-sm text-slate-500">No pending approvals.</p>
+          )}
+          {pendingApprovals.map((interview) => (
+            <div key={interview.application_id} className="bg-[var(--bg-muted)] opacity-80 rounded-xl border border-slate-200 p-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className={`flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold text-xl ${interview.logoColor} opacity-70`}>
-                  {interview.logoText}
+                <div className={`flex items-center justify-center w-12 h-12 rounded-lg text-white font-bold text-xl bg-[#a855f7] opacity-70`}>
+                  {interview.company_name[0]}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-500" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>
-                    {interview.company} — {interview.role}
+                    {interview.company_name} — {interview.role}
                   </h3>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">{interview.shortDetails}</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    {interview.interview_date ? new Date(interview.interview_date).toLocaleDateString() : "TBD"}
+                    {interview.package_min ? ` · ${interview.package_min}-${interview.package_max} LPA` : ""}
+                  </p>
                 </div>
               </div>
               <div className="bg-[#fef3c7] text-[#d97706] px-3 py-1 text-xs font-semibold rounded-md border border-[#fde68a]">
@@ -247,24 +338,26 @@ export default function InterviewsPage() {
       </div>
 
       {/* Activation Modal Overlay */}
-      {selectedInterview && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      {isMounted && selectedInterview && createPortal(
+        <div className="fixed top-0 bottom-0 right-0 left-0 lg:left-[260px] bg-black/40 flex items-center justify-center z-60 p-4 overflow-y-auto">
           <div className="bg-white rounded-[20px] max-w-2xl w-full p-8 shadow-2xl animate-fade-in my-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-semibold text-slate-800" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>Confirm activation</h2>
               <button onClick={closeModal} className="px-5 py-2 border border-slate-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Cancel</button>
             </div>
 
-            {/* Target Banner */}
             <div className="bg-[#eff6ff] rounded-xl p-4 flex items-center gap-4 mb-8">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-lg text-white font-bold ${selectedInterview.logoColor}`}>
-                {selectedInterview.logoText}
+              <div className={`flex items-center justify-center w-10 h-10 rounded-lg text-white font-bold bg-[#1e3a8a]`}>
+                {selectedInterview.company_name[0]}
               </div>
               <div>
                 <h3 className="text-base font-bold text-[#1e3a8a] leading-tight" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>
-                  {selectedInterview.company} — {selectedInterview.role}
+                  {selectedInterview.company_name} — {selectedInterview.role}
                 </h3>
-                <p className="text-[13px] text-blue-800/70 font-medium mt-0.5">{selectedInterview.details}</p>
+                <p className="text-[13px] text-blue-800/70 font-medium mt-0.5">
+                  {selectedInterview.interview_date ? new Date(selectedInterview.interview_date).toLocaleDateString() : "TBD"}
+                  {selectedInterview.package_min ? ` · ${selectedInterview.package_min}-${selectedInterview.package_max} LPA` : ""}
+                </p>
               </div>
             </div>
 
@@ -352,13 +445,15 @@ export default function InterviewsPage() {
               <button onClick={closeModal} className="px-6 py-3 rounded-xl border border-slate-300 text-slate-800 font-bold hover:bg-slate-50 transition w-32 text-center">
                 Go back
               </button>
-              <button onClick={handleConfirmActivate} className="px-6 py-3 rounded-xl bg-slate-900 border border-slate-900 text-white font-bold hover:bg-slate-800 transition w-56 text-center">
+              <button onClick={handleConfirmActivate} disabled={activating} className="px-6 py-3 rounded-xl bg-slate-900 border border-slate-900 text-white font-bold hover:bg-slate-800 transition w-56 text-center disabled:opacity-50 flex justify-center items-center gap-2">
+                {activating && <LoadingSpinner />}
                 Confirm and activate
               </button>
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Feedback Modal */}

@@ -174,6 +174,9 @@ def generate_prep(payload: PrepGenerateRequest, db: Session = Depends(get_db)):
 
     # Calculate days_available based on default 14 days
     days_available = 14
+    
+    # Extract role from target
+    role = target.role or "general"
 
     plan_signature = build_plan_signature(
         payload.student_id,

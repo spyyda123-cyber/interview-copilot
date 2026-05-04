@@ -162,6 +162,9 @@ export default function OnboardingPage() {
 
       sessionStorage.setItem("student_name", `${firstName} ${lastName}`);
       sessionStorage.setItem("known_skills_detailed", JSON.stringify(skills));
+      // Store primary_skill so Interview List activation modal pre-populates correctly
+      const inferredPrimary = skills.length > 0 ? skills[0].skill : "General";
+      sessionStorage.setItem("primary_skill", inferredPrimary);
 
       // After onboarding, standard flow goes to /target
       router.push("/target");

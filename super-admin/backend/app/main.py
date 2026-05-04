@@ -14,7 +14,7 @@ from shared.config import settings
 from shared.db.base import Base
 from shared.db.session import engine
 
-from app.api import auth, colleges, dashboard, tokens
+from app.api import auth, colleges, dashboard, tokens, token_requests
 
 
 logger = logging.getLogger("super_admin.startup")
@@ -62,6 +62,7 @@ app.include_router(auth.router, prefix="/auth")
 app.include_router(dashboard.router, prefix="/dashboard")
 app.include_router(colleges.router, prefix="/colleges")
 app.include_router(tokens.router)
+app.include_router(token_requests.router)
 
 
 @app.get("/health")

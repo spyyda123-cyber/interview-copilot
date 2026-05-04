@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models import Student, StudentProfile, Marksheet
 from app.schemas.student import StudentCreateRequest, StudentCreateResponse
+from shared.models.admin_models import StudentDatabaseRecord
 from shared.storage import get_s3_service
 
 router = APIRouter(prefix="/student", tags=["student"])
@@ -168,7 +169,40 @@ def get_student_marksheets(
                 "file_name": m.file_name,
                 "file_type": m.file_type,
                 "created_at": m.created_at.isoformat(),
-            }
-            for m in marksheets
+            } for m in marksheets
         ]
     }
+
+@router.get("/{student_id}/profile")
+def get_student_profile(
+    student_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve the student's profile including academic records (CGPA, backlogs) from admin database."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    profile_data = {
+        "id": student.id,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "email": student.email,
+        "department": student.department,
+        "cgpa": 0.0,
+        "backlogs": 0,
+        "is_verified": False,
+    }
+
+    if student.email:
+        db_record = db.query(StudentDatabaseRecord).filter(
+            StudentDatabaseRecord.email.ilike(student.email)
+        ).first()
+        
+        if db_record:
+            profile_data["cgpa"] = db_record.cgpa
+            profile_data["backlogs"] = db_record.backlogs
+            profile_data["department"] = db_record.department
+            profile_data["is_verified"] = True
+
+    return profile_data

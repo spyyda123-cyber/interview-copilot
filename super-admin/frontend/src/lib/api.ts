@@ -249,3 +249,46 @@ export async function allocateTokens(
 export async function getCollegeTokenUsage(collegeId: string) {
   return authFetch<CollegeTokenUsage>(`/colleges/${collegeId}/token-usage`);
 }
+
+// ── Token Requests ─────────────────────────────────────────────
+
+export type SuperAdminTokenRequestItem = {
+  id: string;
+  college_id: string;
+  college_name: string;
+  admin_name: string | null;
+  admin_email: string | null;
+  count: number;
+  note: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type SuperAdminTokenRequestListResponse = {
+  items: SuperAdminTokenRequestItem[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function listAllTokenRequests(params?: { status?: string; page?: number; per_page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.per_page) qs.set('per_page', String(params.per_page));
+  return authFetch<SuperAdminTokenRequestListResponse>(`/token-requests${qs.toString() ? `?${qs.toString()}` : ''}`);
+}
+
+export async function fulfillTokenRequest(requestId: string) {
+  return authFetch<{ status: string; request_id: string; tokens_allocated: number }>(
+    `/token-requests/${requestId}/fulfill`,
+    { method: 'POST' }
+  );
+}
+
+export async function rejectTokenRequest(requestId: string) {
+  return authFetch<{ status: string; request_id: string }>(
+    `/token-requests/${requestId}/reject`,
+    { method: 'POST' }
+  );
+}

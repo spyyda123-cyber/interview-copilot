@@ -201,6 +201,65 @@ export type PendingFeedbackResponse = {
   count: number;
 };
 
+// ── Placement & Profile Types ──────────────────────────────────────
+
+export type StudentProfileResponse = {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  department: string;
+  cgpa: number;
+  backlogs: number;
+  is_verified: boolean;
+};
+
+export type CompanyListItem = {
+  id: string;
+  company_name: string;
+  role: string;
+  package_min: number | null;
+  package_max: number | null;
+  interview_date: string | null;
+  min_cgpa: number | null;
+  max_backlogs: number | null;
+  eligible_departments: string[];
+  job_description: string | null;
+  status: string;
+  application_status: string | null;
+};
+
+export type PlacementListResponse = {
+  companies: CompanyListItem[];
+  total: number;
+};
+
+export type ApplicationItem = {
+  application_id: string;
+  company_id: string;
+  company_name: string;
+  role: string;
+  package_min: number | null;
+  package_max: number | null;
+  interview_date: string | null;
+  job_description: string | null;
+  application_status: string;
+  applied_at: string;
+};
+
+export type ApplicationListResponse = {
+  applications: ApplicationItem[];
+  total: number;
+};
+
+export type ActionResponse = {
+  status: string;
+  application_id?: string;
+  message: string;
+  company_name?: string;
+  role?: string;
+};
+
 const buildUrl = (path: string) => {
   if (path.startsWith("http")) {
     return path;
@@ -499,4 +558,38 @@ export const getFeedbackByCompany = async (studentId: number, companyName: strin
 
 export const getAllFeedbacks = async (studentId: number) => {
   return apiFetch<FeedbackResponse[]>(`/feedback/all/${studentId}`);
+};
+
+// ── Placement & Profile API Functions ───────────────────────────────
+
+export const getStudentProfile = async (studentId: number) => {
+  return apiFetch<StudentProfileResponse>(`/student/${studentId}/profile`);
+};
+
+export const getPlacements = async (studentId: number) => {
+  return apiFetch<PlacementListResponse>(`/placement/companies?student_id=${studentId}`);
+};
+
+export const getStudentApplications = async (studentId: number) => {
+  return apiFetch<ApplicationListResponse>(`/placement/applications?student_id=${studentId}`);
+};
+
+export const markInterest = async (studentId: number, companyId: string) => {
+  return apiFetch<ActionResponse>("/placement/interest", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ student_id: studentId, company_id: companyId }),
+  });
+};
+
+export const activateCompany = async (studentId: number, companyId: string) => {
+  return apiFetch<ActionResponse>("/placement/activate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ student_id: studentId, company_id: companyId }),
+  });
 };

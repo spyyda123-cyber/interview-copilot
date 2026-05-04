@@ -36,7 +36,7 @@ const NAV_ITEMS = [
       },
       {
         label: "Study Plan",
-        href: "/plan",
+        href: "/study-plan",
         icon: (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         ),
@@ -99,7 +99,7 @@ const ONBOARDING_NAV_ITEMS = [
       },
       {
         label: "Study plan",
-        href: "/study-plan", // Different from /plan to avoid clash or just disabled
+        href: "/study-plan", // Point to interactive study plan (Q&A, quiz, coding)
         icon: (
           <div className="flex items-center justify-center w-[18px] h-[18px] bg-[#2E3C4D] text-slate-500 font-bold text-[9px] rounded-sm">SP</div>
         ),
@@ -132,8 +132,9 @@ export default function Sidebar() {
     const keysToClear = [
       "student_id", "student_name", "student_email",
       "company_name", "interview_date", "role", "target_id", "resume_id",
-      "primary_skill", "known_skills", "support_mode", "tone",
-      "coding_required", "jd_text",
+      "primary_skill", "known_skills", "known_skills_detailed",
+      "support_mode", "tone", "coding_required", "jd_text",
+      "ats_score", "missing_skills",
     ];
     keysToClear.forEach((key) => sessionStorage.removeItem(key));
     router.replace("/login");

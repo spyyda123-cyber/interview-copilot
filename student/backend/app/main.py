@@ -21,6 +21,7 @@ from app.api import (
     prep,
     scorm,
     feedback,
+    placement,
 )
 from app.core.config import masked_gemini_key, settings
 from app.db.base import Base
@@ -41,6 +42,7 @@ cors_origins = [
     for origin in settings.CORS_ORIGINS.split(",")
     if origin.strip()
 ]
+logger.info("[CORS] Allowed Origins: %s", cors_origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,6 +92,7 @@ app.include_router(knowledge.router)
 app.include_router(system.router)
 app.include_router(scorm.router)
 app.include_router(feedback.router)
+app.include_router(placement.router)
 
 
 @app.get("/health")

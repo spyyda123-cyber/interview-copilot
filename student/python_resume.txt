@@ -1,0 +1,27 @@
+John Doe
+Email: john.doe@example.com
+Phone: (555) 123-4567
+
+Summary
+Experienced Python Developer with 4 years of experience building scalable backend systems using Django, Flask, and FastAPI. Strong background in RESTful APIs, PostgreSQL, and AWS.
+
+Experience
+Senior Python Developer | TechCorp Inc. (2022 - Present)
+- Designed and implemented microservices using FastAPI and Docker, improving system throughput by 40%.
+- Integrated AWS S3 for storage and Celery for asynchronous background task processing.
+- Optimized PostgreSQL queries reducing latency by 30%.
+- Mentored junior developers in Python best practices and asynchronous programming.
+
+Python Developer | WebSolutions LLC (2020 - 2022)
+- Developed RESTful APIs using Django Rest Framework for a high-traffic e-commerce platform.
+- Wrote extensive unit tests using pytest, achieving 90% code coverage.
+- Handled CI/CD pipelines using GitHub Actions.
+
+Education
+B.S. in Computer Science | University of Technology (2016 - 2020)
+
+Skills
+Languages: Python, JavaScript, SQL
+Frameworks: Django, Flask, FastAPI, Celery
+Databases: PostgreSQL, Redis, MongoDB
+Tools: Docker, Git, AWS, CI/CD

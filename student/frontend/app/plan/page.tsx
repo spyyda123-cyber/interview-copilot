@@ -113,6 +113,50 @@ import {
   type PlanDetailResponse,
 } from "@/src/lib/api";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
+/** Auto-fetch and store target_id from placement applications */
+async function resolveTargetId(studentId: number): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/placement/applications?student_id=${studentId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const activated = (data.applications || []).find((a: any) => a.application_status === "ACTIVATED");
+    if (!activated) return null;
+    // Fetch the target for this company
+    const companyName = activated.company_name;
+    sessionStorage.setItem("company_name", companyName);
+    sessionStorage.setItem("role", activated.role || "");
+    // Now resolve target_id from the backend
+    const targRes = await fetch(`${API_BASE}/target/list?student_id=${studentId}`);
+    if (targRes.ok) {
+      const targData = await targRes.json();
+      const match = (targData.targets || []).find((t: any) => t.company_name === companyName);
+      if (match) {
+        sessionStorage.setItem("target_id", String(match.id));
+        return match.id;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Auto-fetch and store resume_id */
+async function resolveResumeId(studentId: number): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/resume/latest?student_id=${studentId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const id = data?.resume_id ?? data?.id ?? null;
+    if (id) sessionStorage.setItem("resume_id", String(id));
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 type PlanTask = {
   title: string;
   description: string;
@@ -222,29 +266,46 @@ export default function PlanPage() {
   }, [studentId, targetId]);
 
   useEffect(() => {
-    const storedResumeId = sessionStorage.getItem("resume_id");
+    const initPage = async () => {
+      const storedStudentId = sessionStorage.getItem("student_id");
 
-    // Guard: redirect if previous steps not completed
-    if (!studentId) {
-      router.push("/login");
-      return;
-    }
+      if (!storedStudentId) {
+        router.push("/login");
+        return;
+      }
 
-    if (!targetId) {
-      router.push("/target");
-      return;
-    }
+      const sid = Number(storedStudentId);
+      let tId = sessionStorage.getItem("target_id") ? Number(sessionStorage.getItem("target_id")) : null;
+      let rId = sessionStorage.getItem("resume_id") ? Number(sessionStorage.getItem("resume_id")) : null;
 
-    if (!storedResumeId) {
-      router.push("/resume");
-      return;
-    }
+      // Auto-resolve missing target_id from backend
+      if (!tId) {
+        tId = await resolveTargetId(sid);
+      }
 
-    // OPTIMIZATION: On page load, automatically initialize plan status.
-    // Plan generation was already enqueued during resume upload.
-    // This just checks current status without triggering new generation.
-    initializePlanStatus();
-  }, [router, studentId, targetId, initializePlanStatus]);
+      // Auto-resolve missing resume_id from backend
+      if (!rId) {
+        rId = await resolveResumeId(sid);
+      }
+
+      if (!tId) {
+        // No activated company found — send to placements
+        router.push("/target");
+        return;
+      }
+
+      if (!rId) {
+        // No resume — send to resume upload
+        router.push("/resume");
+        return;
+      }
+
+      // All good — trigger plan generation
+      initializePlanStatus();
+    };
+
+    initPage();
+  }, [router, initializePlanStatus]);
 
   const planJson = useMemo(() => {
     const data = planDetails?.plan_json as PlanJson | undefined;

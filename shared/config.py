@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 8
-
-    class Config:
-        env_file = str(Path(__file__).resolve().parents[1] / ".env")
-        case_sensitive = True
+    model_config = {
+        "env_file": str(Path(__file__).resolve().parents[1] / ".env"),
+        "case_sensitive": True
+    }
 
 
 settings = Settings()
