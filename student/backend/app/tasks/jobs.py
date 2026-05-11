@@ -218,12 +218,27 @@ def analyze_target_task(target_id: int) -> dict:
         chunks = retrieve_company_context(db, target.company_name, target.role, query_text)
         context = build_company_context(chunks)
 
-        llm_analysis = analyze_target_jd(
+        llm_analysis, usage = analyze_target_jd(
             company_name=target.company_name,
             role=target.role or "general",
             jd_text=target.jd_text,
             company_context=context,
         )
+
+        if usage:
+            try:
+                from app.services.usage_service import record_llm_usage
+                record_llm_usage(
+                    db=db,
+                    provider="openai" if "gpt" in usage["model"].lower() else "gemini",
+                    model=usage["model"],
+                    action="jd_analysis",
+                    prompt_tokens=usage["prompt_tokens"],
+                    completion_tokens=usage["completion_tokens"],
+                    student_id=target.student_id
+                )
+            except Exception as usage_exc:
+                logger.warning("[TARGET-USAGE] Failed to record usage: %s", usage_exc)
 
         llm_skills = llm_analysis.get("required_skills")
         if isinstance(llm_skills, list):
@@ -330,6 +345,13 @@ def generate_plan_task(
         
         for attempt in range(max_retries + 1):
             try:
+                # Rollback any dirty session state from previous failed attempt
+                if attempt > 0:
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+
                 logger.info(
                     "[PLAN-TRACE] Step 6: Attempting plan generation (attempt %d/%d)",
                     attempt + 1,
@@ -408,30 +430,71 @@ def generate_plan_task(
             "[PLAN-FALLBACK] Plan generation failed after %d retries, generating fallback plan",
             max_retries + 1,
         )
-        
-        fallback_plan_data = _generate_fallback_plan(days_available)
-        logger.info("[PLAN-FALLBACK] Fallback plan created with %d days", days_available)
-        
-        # Store fallback plan in DB
-        fallback_plan = LearningPlan(
-            student_id=student_id,
-            company_name=company_name,
-            role=role or "general",
-            days_available=days_available,
-            plan_signature=plan_signature,
-            status="ready",  # CRITICAL: Mark as ready, not failed
-            plan_json=fallback_plan_data,
-            tasks_generated=1,  # Fallback plans are complete, don't need enrichment
+
+        _profile = db.query(StudentProfile).filter(StudentProfile.student_id == student_id).first()
+        fallback_plan_data = _generate_fallback_plan(
+            days_available,
+            role=role,
+            primary_skill=_profile.primary_skill if _profile else None,
         )
-        
-        # DIAGNOSTICS: Set plan_type and failure_reason if columns exist
+        logger.info("[PLAN-FALLBACK] Fallback plan created with %d days", days_available)
+
+        # ── Use raw SQL UPDATE/INSERT to bypass SQLAlchemy session state ──
+        # The session may be in PendingRollbackError after failed LLM attempts.
+        # Raw SQL bypasses the ORM session entirely and always works.
+        import json as _json
+        from sqlalchemy import text as _text
+
+        plan_json_str = _json.dumps(fallback_plan_data)
+
+        # Close the dirty session and open a fresh one
         try:
-            fallback_plan.plan_type = "fallback"
-            fallback_plan.failure_reason = failure_reason
+            db.close()
         except Exception:
-            pass  # Columns might not exist yet (migration pending)
-        db.add(fallback_plan)
-        db.flush()
+            pass
+        db = SessionLocal()
+
+        try:
+            # Try UPDATE first (stub exists from activation)
+            result = db.execute(
+                _text(
+                    "UPDATE learning_plans SET status='ready', plan_json=CAST(:pj AS json), "
+                    "tasks_generated=1 WHERE plan_signature=:sig"
+                ),
+                {"pj": plan_json_str, "sig": plan_signature},
+            )
+            db.commit()
+
+            if result.rowcount == 0:
+                # No existing row — INSERT
+                db.execute(
+                    _text(
+                        "INSERT INTO learning_plans "
+                        "(student_id, company_name, role, days_available, plan_signature, "
+                        "status, plan_json, tasks_generated, summary_generated, created_at) "
+                        "VALUES (:sid, :co, :ro, :da, :sig, 'ready', CAST(:pj AS json), 1, false, NOW())"
+                    ),
+                    {
+                        "sid": student_id,
+                        "co": company_name,
+                        "ro": role or "general",
+                        "da": days_available,
+                        "sig": plan_signature,
+                        "pj": plan_json_str,
+                    },
+                )
+                db.commit()
+
+            # Fetch the saved plan
+            fallback_plan = (
+                db.query(LearningPlan)
+                .filter(LearningPlan.plan_signature == plan_signature)
+                .first()
+            )
+
+        except Exception as raw_exc:
+            logger.error("[PLAN-FALLBACK] Raw SQL fallback also failed: %s", raw_exc)
+            return {"status": "failed", "error": str(raw_exc)}
         
         # Add learning tasks from fallback plan
         for day_data in fallback_plan_data.get("daily_plan", []):
@@ -469,6 +532,8 @@ def generate_plan_task(
         logger.error("[PLAN-TRACE] traceback\n%s", traceback.format_exc())
         
         try:
+            # Rollback any dirty transaction before attempting to mark as failed
+            db.rollback()
             failed_signature = build_plan_signature(
                 student_id,
                 company_name,
@@ -609,14 +674,78 @@ def generate_plan_summary(plan_id: int) -> dict:
     No JSON, no markdown fences, no bullet symbols, and no extra sections."""
 
         try:
-            from app.services.llm_client import generate_learning_plan as generate_content
-            logger.info("[PLAN-SUMMARY] Calling Gemini for plan summary plan_id=%s", plan_id)
-            summary_response = generate_content(summary_prompt)
-            plan.plan_summary = summary_response.strip()
-            plan.tasks_generated = 1
-            plan.summary_generated = True
+            # Use Gemini directly for advisory plain-text summary.
+            # generate_learning_plan enforces OpenAI JSON schema (daily_plan/overview/resources)
+            # which is incompatible with a plain-text advisory response.
+            from app.services.llm_client import _generate_content_with_timeout, _use_openai
+            if _use_openai():
+                # Route via OpenAI as a simple chat call (no JSON schema enforcement)
+                from app.services.openai_client import _get_client, _load_system_prompt
+                import concurrent.futures
+                client = _get_client()
+                primary_model = getattr(__import__('app.core.config', fromlist=['settings']).settings, 'OPENAI_GENERATION_MODEL', 'gpt-4o')
+                fallback_model = getattr(__import__('app.core.config', fromlist=['settings']).settings, 'OPENAI_FALLBACK_MODEL', 'gpt-4o-mini')
+
+                def _openai_summary_call(model):
+                    logger.info("[PLAN-SUMMARY] Calling OpenAI model=%s for plan summary plan_id=%s", model, plan_id)
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": "You are an elite technical interview strategist."},
+                            {"role": "user", "content": summary_prompt},
+                        ],
+                        temperature=0.4,
+                        max_tokens=1200,
+                    )
+                    content = response.choices[0].message.content or ""
+                    u = response.usage
+                    usage_data = {
+                        "prompt_tokens": u.prompt_tokens,
+                        "completion_tokens": u.completion_tokens,
+                        "total_tokens": u.total_tokens,
+                        "model": response.model,
+                    } if u else None
+                    return content, usage_data
+
+                summary_text = None
+                usage = None
+                for model in [primary_model, fallback_model]:
+                    try:
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(_openai_summary_call, model)
+                            summary_text, usage = future.result(timeout=90)
+                        break
+                    except Exception as model_exc:
+                        logger.warning("[PLAN-SUMMARY] OpenAI model=%s failed: %s", model, model_exc)
+
+                if not summary_text:
+                    raise RuntimeError("All OpenAI models failed for plan summary")
+            else:
+                # Gemini path
+                summary_text, usage = _generate_content_with_timeout(summary_prompt, timeout_seconds=90)
+
+            # Use raw SQL to avoid stale ORM object issues
+            from sqlalchemy import text as _text
+            db.execute(
+                _text("UPDATE learning_plans SET plan_summary=:summary, tasks_generated=1, summary_generated=true WHERE id=:pid"),
+                {"summary": summary_text.strip(), "pid": plan_id},
+            )
             db.commit()
-            db.refresh(plan)
+
+            if usage:
+                try:
+                    from app.services.usage_service import record_llm_usage
+                    record_llm_usage(
+                        db=db,
+                        provider="openai" if "gpt" in usage["model"].lower() else "gemini",
+                        model=usage["model"],
+                        action="plan_summary",
+                        prompt_tokens=usage["prompt_tokens"],
+                        completion_tokens=usage["completion_tokens"],
+                        student_id=plan.student_id
+                    )
+                except Exception as usage_exc:
+                    logger.warning("[SUMMARY-USAGE] Failed to record usage: %s", usage_exc)
             logger.info("[PLAN-SUMMARY] Plan summary generated successfully plan_id=%s", plan_id)
             return {"plan_id": plan_id, "status": "generated"}
 

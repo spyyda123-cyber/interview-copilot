@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.student import Student
+from app.models import Student, StudentProfile
 from app.schemas.auth import AuthResponse, LoginRequest, SignupRequest
 from app.security.auth_utils import get_password_hash, verify_password
 from app.services.activity_logger import log_activity
@@ -61,4 +61,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     except Exception:
         pass
 
-    return AuthResponse(student_id=student.id, student_name=student.full_name)
+    primary_skill = "General"
+    profile = db.query(StudentProfile).filter(StudentProfile.student_id == student.id).first()
+    if profile:
+        primary_skill = profile.primary_skill
+
+    return AuthResponse(
+        student_id=student.id, 
+        student_name=student.full_name,
+        primary_skill=primary_skill
+    )

@@ -70,7 +70,7 @@ def create_student(payload: StudentCreateRequest, db: Session = Depends(get_db))
     return StudentCreateResponse(student_id=student.id)
 
 @router.post("/marksheets/upload")
-async def upload_marksheet(
+def upload_marksheet(
     student_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -94,7 +94,7 @@ async def upload_marksheet(
         raise HTTPException(status_code=404, detail="Student not found")
     
     # ── Read file bytes ──────────────────────────────────────────
-    file_bytes = await file.read()
+    file_bytes = file.file.read()
     ext = os.path.splitext(file.filename)[1].lower()
     file_type = ext.lstrip('.')  # e.g., 'pdf', 'jpg', 'png'
     filename = f"{uuid.uuid4().hex}{ext}"
@@ -135,6 +135,14 @@ async def upload_marksheet(
     db.commit()
     db.refresh(marksheet)
     
+    # ── Parse Marksheet via Gemini ───────────────────────────────
+    try:
+        from app.services.marksheet_service import parse_marksheet_file
+        parsed_data = parse_marksheet_file(marksheet.id, file_path, db)
+    except Exception as exc:
+        print(f"Marksheet parsing failed: {exc}")
+        parsed_data = {"cgpa": 0.0, "backlogs": 0}
+
     # Return marksheet info  
     return {
         "id": marksheet.id,
@@ -142,6 +150,7 @@ async def upload_marksheet(
         "file_name": file.filename,
         "file_type": file_type,
         "created_at": marksheet.created_at.isoformat(),
+        "parsed_data": parsed_data,
     }
 
 
@@ -183,12 +192,15 @@ def get_student_profile(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
+    profile = db.query(StudentProfile).filter(StudentProfile.student_id == student.id).first()
+    
     profile_data = {
         "id": student.id,
         "first_name": student.first_name,
         "last_name": student.last_name,
         "email": student.email,
         "department": student.department,
+        "primary_skill": profile.primary_skill if profile else "General",
         "cgpa": 0.0,
         "backlogs": 0,
         "is_verified": False,
@@ -204,5 +216,9 @@ def get_student_profile(
             profile_data["backlogs"] = db_record.backlogs
             profile_data["department"] = db_record.department
             profile_data["is_verified"] = True
+        elif profile and profile.marksheets:
+            latest_marksheet = profile.marksheets[-1]
+            profile_data["cgpa"] = latest_marksheet.get("cgpa", 0.0)
+            profile_data["backlogs"] = latest_marksheet.get("backlogs", 0)
 
     return profile_data

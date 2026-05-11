@@ -24,6 +24,7 @@ from shared.models import (
     Marksheet,
     InterviewFeedback,
     FeedbackAnalysisCache,
+    LLMUsageLog,
 )
 
 __all__ = [
@@ -53,4 +54,5 @@ __all__ = [
     "Marksheet",
     "InterviewFeedback",
     "FeedbackAnalysisCache",
+    "LLMUsageLog",
 ]

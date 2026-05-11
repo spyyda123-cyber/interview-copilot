@@ -90,22 +90,96 @@ PLAN_SCHEMA: Dict[str, Any] = {
                                     "title": {"type": "string"},
                                     "description": {"type": "string"},
                                     "duration_minutes": {"type": "integer"},
+                                    "task_type": {"type": "string", "enum": ["text", "qa", "code"]},
+                                    "qa_pairs": {
+                                        "type": "array",
+                                        "minItems": 3,
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "question": {"type": "string"},
+                                                "answer": {"type": "string"},
+                                                "explanation": {"type": "string"},
+                                                "transition_note": {"type": ["string", "null"]}
+                                            },
+                                            "required": ["question", "answer", "explanation", "transition_note"],
+                                            "additionalProperties": False
+                                        }
+                                    },
+                                    "quiz": {
+                                        "type": "array",
+                                        "minItems": 2,
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "question": {"type": "string"},
+                                                "options": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                    "minItems": 4,
+                                                    "maxItems": 4
+                                                },
+                                                "correct_index": {"type": "integer", "minimum": 0, "maximum": 3},
+                                                "explanation": {"type": "string"}
+                                            },
+                                            "required": ["question", "options", "correct_index", "explanation"],
+                                            "additionalProperties": False
+                                        }
+                                    },
+                                    "code_metadata": {
+                                        "type": ["object", "null"],
+                                        "properties": {
+                                            "language": {"type": "string"},
+                                            "initial_code": {"type": "string"},
+                                            "solution": {"type": "string"},
+                                            "difficulty": {"type": "string", "enum": ["Easy", "Medium", "Hard"]},
+                                            "examples": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "input": {"type": "string"},
+                                                        "output": {"type": "string"},
+                                                        "explanation": {"type": "string"}
+                                                    },
+                                                    "required": ["input", "output", "explanation"],
+                                                    "additionalProperties": False
+                                                }
+                                            },
+                                            "constraints": {"type": "array", "items": {"type": "string"}},
+                                            "test_cases": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "input": {"type": "string"},
+                                                        "expected": {"type": "string"},
+                                                        "label": {"type": "string"}
+                                                    },
+                                                    "required": ["input", "expected", "label"],
+                                                    "additionalProperties": False
+                                                }
+                                            }
+                                        },
+                                        "required": ["language", "initial_code", "solution", "difficulty", "examples", "constraints", "test_cases"],
+                                        "additionalProperties": False
+                                    }
                                 },
-                                "required": ["title", "description", "duration_minutes"],
-                                "additionalProperties": False,
-                            },
-                        },
-                    },
-                    "required": ["day", "focus", "tasks"],
-                    "additionalProperties": False,
-                },
-            },
-            "resources": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["overview", "daily_plan", "resources"],
-        "additionalProperties": False,
-    },
-}
+                                 "required": ["title", "description", "duration_minutes", "task_type", "qa_pairs", "quiz", "code_metadata"],
+                                 "additionalProperties": False,
+                             },
+                         },
+                     },
+                     "required": ["day", "focus", "tasks"],
+                     "additionalProperties": False,
+                 },
+             },
+             "resources": {"type": "array", "items": {"type": "string"}},
+         },
+         "required": ["overview", "daily_plan", "resources"],
+         "additionalProperties": False,
+     },
+ }
 
 # JSON schema for JD analysis output
 JD_ANALYSIS_SCHEMA: Dict[str, Any] = {
@@ -294,9 +368,9 @@ def _build_user_message(context: dict) -> str:
     missing_skills   = context.get("missing_skills", [])
     keyword_score    = context.get("keyword_score", 0)
 
-    resume_context      = context.get("resume_context", "Not available")[:1500]  # Limit to 1500 chars
-    profile_context     = context.get("profile_context", "Not available")[:800]
-    company_intelligence = context.get("company_context", "No company interview intelligence available")[:1500]
+    resume_context      = context.get("resume_context", "Not available")[:800]   # Trimmed for speed
+    profile_context     = context.get("profile_context", "Not available")[:400]
+    company_intelligence = context.get("company_context", "No company interview intelligence available")[:600]
 
     # Format known_skills
     known_skills_limited = known_skills[:15] if isinstance(known_skills, list) else []
@@ -311,64 +385,96 @@ def _build_user_message(context: dict) -> str:
     missing_skills_str = ", ".join(missing_skills) if missing_skills else "None"
 
     # Truncate JD
-    jd_trimmed = jd_text[:800] if jd_text and len(jd_text) > 800 else jd_text
+    jd_trimmed = jd_text[:500] if jd_text and len(jd_text) > 500 else jd_text
 
     # Cross-language transition block (activates system prompt Section 5)
     lang_block = _build_language_transition_block(context)
     lang_section = f"\n{lang_block}\n" if lang_block else ""
+    marksheet_context = context.get("marksheet_context", "No marksheets uploaded.")
 
     return f"""STUDENT PROFILE:
-
 * Name: {student_name}
 * Primary Skill: {primary_skill}
-* Known Skills (with proficiency levels):
+* Known Skills (with proficiency):
 {known_skills_str}
-* Days Remaining: {days_available}
+* Days Remaining Until Interview: {days_available}
 * Support Mode: {support_mode}
 * Preferred Tone: {tone}
 * Coding Tasks Required: {coding_required}
 
 STUDENT PROFILE CONTEXT:
 {profile_context}
-{lang_section}
-TARGET INTERVIEW:
 
+MARKSHEETS (Academic Foundation):
+{marksheet_context}
+
+TARGET INTERVIEW — BUILD THE ENTIRE PLAN AROUND THIS:
 * Company: {company_name}
 * Role: {role}
-* Difficulty: {difficulty}
-* Interview Rounds: {round_structure}
+* Difficulty Level: {difficulty}
+* Interview Round Structure: {round_structure}
 * Job Description:
-  {jd_trimmed}
+{jd_trimmed}
 
-RESUME GAP ANALYSIS:
-
-* ATS Score: {ats_score}
+RESUME GAP ANALYSIS — PRIORITIZE THESE IN DAY 1-2:
+* ATS Score: {ats_score}%
 * Missing Skills: {missing_skills_str}
-* Keyword Match: {keyword_score}
+* Keyword Match Score: {keyword_score}%
 
-RESUME CONTEXT:
+RESUME CONTEXT (use for STAR stories):
 {resume_context}
 
 COMPANY INTERVIEW INTELLIGENCE:
 {company_intelligence}
+{lang_section}
 
-TASK:
-Create a day-by-day interview preparation strategy following ALL sections of the system prompt.
-If a language transition is detected above, embed comparison study INLINE within relevant task descriptions on Day 1-2 only (see system prompt Section 5). Do NOT create a separate transition day or module.
+GENERATE A {days_available}-DAY PERSONALIZED STUDY PLAN FOR:
+→ Student: {student_name} (background: {primary_skill})
+→ Target: {role} at {company_name}
+→ Time available: {days_available} days
+→ Missing skills to fix first: {missing_skills_str}
 
-Rules:
-* Prioritize missing skills and Beginner-proficiency required skills FIRST (disqualifiers)
-* Treat Advanced skills as strengths to polish, not rebuild
-* Include coding tasks only if coding_required is True
-* Include "explain out loud" tasks daily
-* Include behavioral STAR story preparation from resume projects
-* Include at least one full mock interview simulation
-* Last day = revision + interview simulation ONLY (no new topics)
-* Adapt difficulty to the student's proficiency level per skill
-* Reference actual resume projects and experiences when possible
-* Do NOT invent skills, projects, or experience not in the data above
+⚠️ MANDATORY RULES — VIOLATION = REJECTED PLAN:
 
-Return ONLY valid JSON matching the schema. No markdown, no explanations."""
+RULE 1 — ROLE-SPECIFIC CONTENT (MOST IMPORTANT):
+The plan MUST cover topics required for "{role}" at "{company_name}".
+Read the JD above carefully. Use ONLY the technologies and skills mentioned in the JD.
+- Machine Learning Engineer → Python, ML algorithms, scikit-learn, pandas, model evaluation, statistics, feature engineering
+- Java Backend Developer → Java, Spring Boot, JPA, REST APIs, Maven, microservices
+- Python Developer → Python OOP, FastAPI/Django, async, decorators, testing
+- Data Scientist → Python, SQL, statistics, ML, data visualization, EDA
+- Frontend Developer → JavaScript/TypeScript, React, CSS, performance
+- NEVER generate Java content for a Python/ML role. NEVER generate Python content for a Java role.
+
+RULE 2 — COMPANY-SPECIFIC TASKS:
+- Every behavioral task MUST reference "{company_name}" specifically
+- "Why {company_name}?" prep task is MANDATORY
+- Reference the company's domain in technical tasks
+
+RULE 3 — STUDENT-SPECIFIC TASKS:
+- Day 1-2: Address missing skills from gap analysis first (disqualifiers)
+- Use resume projects for STAR story tasks
+- Support Mode "{support_mode}": Guided = step-by-step; Self-paced = concise; Adaptive = gap-based
+- Tone "{tone}": Supportive = encouraging; Direct = no-fluff; Neutral = balanced
+
+RULE 4 — TIME ADAPTATION ({days_available} days):
+{"SURVIVAL: Top 5 topics only, rapid Q&A, 3 STAR stories, mental prep" if days_available <= 1 else "SPRINT: High-probability topics, one mock, one behavioral session" if days_available <= 3 else "STRUCTURED: Full JD coverage, mock on day " + str(max(1, days_available - 2)) + ", revision on last day" if days_available <= 7 else "FULL ROADMAP: Week 1 fixes disqualifiers, Week 2+ builds depth and mock interviews"}
+
+RULE 5 — EVERY TASK MUST HAVE qa_pairs AND quiz:
+- qa_pairs: 3-5 items per task, each with question + answer + explanation (4+ paragraphs) + transition_note
+- quiz: 2-3 MCQs with 4 options, correct_index, explanation
+- Last task of EVERY day: "Module Mastery Quiz" (5 qa_pairs + 3 quiz questions)
+
+RULE 6 — SECOND-TO-LAST DAY = CODING MOCK TESTS:
+- task_type="code" with real DSA problems relevant to {role}
+- Full code_metadata: language, initial_code, solution, difficulty, description, hint, examples, constraints, test_cases (5+)
+
+RULE 7 — LAST DAY = BEHAVIORAL INTERVIEW:
+- Focus: "Behavioral Interview"
+- Tasks: Tell Me About Yourself, STAR Scenarios, HR Questions, Module Mastery Quiz
+- All task_type="qa", NO code tasks
+
+Return ONLY valid JSON. No markdown, no code fences, no explanation text."""
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +486,7 @@ def _call_openai_with_timeout(
     user_message: str,
     model: str,
     response_schema: Dict[str, Any],
-    timeout_seconds: int = 90,
+    timeout_seconds: int = 180,
 ) -> str:
     """
     Call OpenAI chat completions with a hard thread-based timeout.
@@ -401,17 +507,18 @@ def _call_openai_with_timeout(
                 "type": "json_schema",
                 "json_schema": response_schema,
             },
-            temperature=0.3,
-            max_tokens=2500,
+            temperature=0.4,
+            max_tokens=16000,
         )
         content = response.choices[0].message.content or "{}"
         usage = response.usage
-        if usage:
-            logger.info(
-                "[GPT5-CLIENT] Tokens used → prompt=%s completion=%s total=%s",
-                usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
-            )
-        return content
+        usage_data = {
+            "prompt_tokens": usage.prompt_tokens,
+            "completion_tokens": usage.completion_tokens,
+            "total_tokens": usage.total_tokens,
+            "model": response.model
+        } if usage else None
+        return content, usage_data
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_call)
@@ -463,7 +570,7 @@ def generate_learning_plan(context: dict) -> dict:
                 logger.info(
                     "[GPT5-PLAN] Attempt %d/%d model=%s", attempt, 2, model
                 )
-                raw_json = _call_openai_with_timeout(
+                raw_json, usage = _call_openai_with_timeout(
                     system_prompt, user_message, model, PLAN_SCHEMA
                 )
                 plan_data = json.loads(raw_json)
@@ -474,7 +581,7 @@ def generate_learning_plan(context: dict) -> dict:
                     continue
 
                 logger.info("[GPT5-PLAN] Plan generated successfully model=%s", model)
-                return plan_data
+                return plan_data, usage
 
             except OpenAITimeoutError as exc:
                 last_error = exc
@@ -500,7 +607,7 @@ def generate_learning_plan(context: dict) -> dict:
         "[GPT5-PLAN] All GPT-5 attempts failed. last_error=%s. Returning fallback.",
         last_error,
     )
-    return _create_fallback_plan(context)
+    return _create_fallback_plan(context), None
 
 
 # ---------------------------------------------------------------------------
@@ -550,10 +657,10 @@ Return structured JSON only."""
 
     for model in models_to_try:
         try:
-            raw_json = _call_openai_with_timeout(
+            raw_json, usage = _call_openai_with_timeout(
                 system_prompt, user_message, model, JD_ANALYSIS_SCHEMA, timeout_seconds=60
             )
-            return json.loads(raw_json)
+            return json.loads(raw_json), usage
         except (OpenAITimeoutError, json.JSONDecodeError, Exception) as exc:
             logger.warning("[GPT5-JD] %s failed model=%s – %s", type(exc).__name__, model, exc)
 
@@ -563,7 +670,7 @@ Return structured JSON only."""
         "difficulty": "unknown",
         "round_structure": "screen -> technical -> behavioral",
         "summary": f"Could not analyse JD for {company_name} ({role}). Prepare broadly.",
-    }
+    }, None
 
 
 # ---------------------------------------------------------------------------
@@ -629,10 +736,10 @@ Return structured JSON only matching the code_report schema."""
 
     for model in models_to_try:
         try:
-            raw_json = _call_openai_with_timeout(
+            raw_json, usage = _call_openai_with_timeout(
                 system_prompt, user_message, model, CODE_REPORT_SCHEMA, timeout_seconds=60
             )
-            return json.loads(raw_json)
+            return json.loads(raw_json), usage
         except (OpenAITimeoutError, json.JSONDecodeError, Exception) as exc:
             logger.warning("[GPT5-CODE-REPORT] %s failed model=%s – %s", type(exc).__name__, model, exc)
 
@@ -640,7 +747,7 @@ Return structured JSON only matching the code_report schema."""
     return {
         "analysis": "Could not generate AI analysis due to an error. Please review your code manually.",
         "lagging_skills": [],
-    }
+    }, None
 
 
 # ---------------------------------------------------------------------------

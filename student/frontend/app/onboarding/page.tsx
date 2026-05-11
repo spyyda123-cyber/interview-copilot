@@ -84,13 +84,23 @@ export default function OnboardingPage() {
   const handleMarksheetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     
-    const newFiles = Array.from(e.target.files).map(file => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      size: file.size,
-      status: "pending" as const,
-      fileObj: file
-    }));
+    const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const files = Array.from(e.target.files);
+    
+    const invalidFiles = files.filter(f => !validExtensions.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (invalidFiles.length > 0) {
+      setError(`Supported formats for marksheets: PDF, JPG, PNG. (Skipped: ${invalidFiles.map(f => f.name).join(', ')})`);
+    }
+
+    const newFiles = files
+      .filter(f => validExtensions.some(ext => f.name.toLowerCase().endsWith(ext)))
+      .map(file => ({
+        id: Math.random().toString(36).substr(2, 9),
+        name: file.name,
+        size: file.size,
+        status: "pending" as const,
+        fileObj: file
+      }));
     
     setMarksheets(prev => [...prev, ...newFiles]);
   };
@@ -98,7 +108,15 @@ export default function OnboardingPage() {
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
+    
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only PDF files are supported for resumes.");
+      if (resumeInputRef.current) resumeInputRef.current.value = "";
+      return;
+    }
+    
     setResumeFileObj(file);
+    setError(null);
     // Mark as selected (will be uploaded in handleSubmit)
   };
 
@@ -324,7 +342,11 @@ export default function OnboardingPage() {
               {marksheets.map(m => (
                 <div key={m.id} className="flex items-center justify-between border border-slate-100 rounded-lg px-4 py-3 bg-red-50/20">
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded uppercase">PDF</span> {/* Hardcoded for UI mock match, can be dynamic */}
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                      m.name.toLowerCase().endsWith('.pdf') ? 'text-red-600 bg-red-100' : 'text-blue-600 bg-blue-100'
+                    }`}>
+                      {m.name.split('.').pop()}
+                    </span>
                     <span className="font-semibold text-slate-800 text-sm">{m.name}</span>
                   </div>
                   <div className="flex items-center gap-4">

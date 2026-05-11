@@ -83,7 +83,12 @@ export default function TargetPage() {
         
       } catch (err) {
         console.error("Failed to load placements:", err);
-        setError("Failed to load placement data. Please try again later.");
+        const message = err instanceof Error ? err.message : "";
+        if (message.includes("College not found")) {
+          setError("Your account is not linked to a college database. Please ask your administrator to invite you via your college email.");
+        } else {
+          setError("Failed to load placement data. Please check your connection and try again later.");
+        }
       } finally {
         setLoading(false);
       }

@@ -30,6 +30,9 @@ export default function LoginPage() {
       if (response.student_name) {
         sessionStorage.setItem("student_name", response.student_name);
       }
+      if (response.primary_skill) {
+        sessionStorage.setItem("primary_skill", response.primary_skill);
+      }
 
       router.push("/dashboard");
     } catch (err) {

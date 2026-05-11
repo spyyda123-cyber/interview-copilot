@@ -28,7 +28,6 @@ import re
 from pathlib import Path
 from typing import Dict
 
-import pdfplumber
 from sqlalchemy.orm import Session
 
 from app.models import Resume, ResumeSection
@@ -88,10 +87,58 @@ def parse_resume_file(resume_id: int, file_path: str, db: Session) -> Dict[str, 
             # Local path — use directly
             read_path = file_path
 
-        # ── Extract text from PDF ───────────────────────────────────────────────
-        with pdfplumber.open(read_path) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
+        # ── Extract text from PDF using Gemini OCR ─────────────────────────────
+        import google.generativeai as genai
+        from app.core.config import settings
+        from app.services.llm_client import _get_generation_model_name
+        
+        # Ensure REST transport for robustness on all environments
+        genai.configure(api_key=settings.GEMINI_API_KEY, transport="rest")
+        
+        logger.info("[RESUME-OCR] Uploading file to Gemini... path=%s", read_path)
+        gemini_file = genai.upload_file(path=read_path, display_name=f"resume_{resume_id}")
+        
+        import time
+        max_wait = 60
+        waited = 0
+        while gemini_file.state.name == "PROCESSING" and waited < max_wait:
+            time.sleep(2)
+            waited += 2
+            gemini_file = genai.get_file(gemini_file.name)
+            
+        if gemini_file.state.name == "FAILED":
+            logger.error("[RESUME-OCR] Gemini file processing failed")
+            raise ValueError("Gemini failed to process the resume document")
 
+        if gemini_file.state.name == "PROCESSING":
+            logger.error("[RESUME-OCR] Gemini file processing timed out")
+            raise ValueError("Gemini file processing timed out")
+
+        text = ""
+        
+        try:
+            resolved_model = _get_generation_model_name()
+            logger.info("[RESUME-OCR] Using model: %s", resolved_model)
+            model = genai.GenerativeModel(resolved_model)
+            prompt = "Extract all text from this resume accurately. Maintain the logical flow and sections (Experience, Education, Skills, etc.). Return only the raw text."
+            response = model.generate_content([prompt, gemini_file])
+            text = response.text
+            
+            # Optionally record usage if needed
+            try:
+                from app.services.usage_service import record_llm_usage
+                usage = {
+                    "prompt_tokens": response.usage_metadata.prompt_token_count,
+                    "completion_tokens": response.usage_metadata.candidates_token_count,
+                    "model": settings.GEMINI_GENERATION_MODEL
+                }
+                record_llm_usage(db, "gemini", usage["model"], "resume_ocr", usage["prompt_tokens"], usage["completion_tokens"], resume.student_id)
+            except Exception as e:
+                logger.warning("[RESUME-OCR] Failed to record usage: %s", e)
+                
+        finally:
+            genai.delete_file(gemini_file.name)
+            
     finally:
         # Always clean up temp file even if parsing fails
         if tmp_path and os.path.exists(tmp_path):
@@ -101,7 +148,6 @@ def parse_resume_file(resume_id: int, file_path: str, db: Session) -> Dict[str, 
             except OSError as e:
                 logger.warning("[RESUME-PARSE] Failed to clean up temp file path=%s error=%s", tmp_path, e)
 
-    text = "\n".join(pages)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{2,}", "\n", text).strip()

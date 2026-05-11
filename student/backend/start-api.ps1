@@ -42,7 +42,7 @@ if (-not (Wait-ForTcpPort -HostName "127.0.0.1" -Port 6379 -TimeoutSeconds 30)) 
     throw "Redis did not become ready on port 6379 within 30 seconds."
 }
 
-$pythonExe = Join-Path $PSScriptRoot "venv\Scripts\python.exe"
+$pythonExe = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $pythonExe)) {
     $pythonExe = "python"
 }

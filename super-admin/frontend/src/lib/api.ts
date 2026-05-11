@@ -86,6 +86,8 @@ export type DashboardSummary = {
   active_colleges: number;
   total_tokens_issued: number;
   total_tokens_consumed: number;
+  total_llm_tokens: number;
+  total_llm_cost_usd: number;
   recent_activity: DashboardActivity[];
 };
 

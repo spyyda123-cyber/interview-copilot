@@ -41,6 +41,8 @@ from app.tasks.jobs import generate_plan_task
 router = APIRouter(prefix="/prep", tags=["prep"])
 # Stale plans (status='generating' for > 10 min) auto-marked as failed to prevent infinite polling
 STALE_GENERATING_MINUTES = 10
+# After 2 minutes with no worker response, generate a fallback plan directly (no Celery needed)
+FALLBACK_AFTER_MINUTES = 2
 TERMINAL_FAILURE_STATUSES = {"failed", "failure", "error", "unknown"}
 
 
@@ -218,6 +220,38 @@ def generate_prep(payload: PrepGenerateRequest, db: Session = Depends(get_db)):
     # Plan exists: normalize stale state and allow retry for terminal failures
     plan = _mark_stale_generating_as_failed(db, plan)
 
+    # ── Detect stale/wrong-role plan and force regeneration ──────────────
+    # If the cached plan overview mentions a different technology than the target role,
+    # delete it and regenerate. This handles the case where a Java fallback plan
+    # was cached for a Python role student.
+    if plan.status == "ready" and plan.plan_json:
+        overview = (plan.plan_json.get("overview") or "").lower()
+        role_lower = role.lower()
+        # Detect mismatch: Java plan for Python role, or vice versa
+        is_java_plan = any(k in overview for k in ["java/spring", "java backend", "spring boot", "java fundamentals"])
+        is_python_role = any(k in role_lower for k in ["python", "django", "fastapi", "flask"])
+        is_python_plan = any(k in overview for k in ["python", "django", "fastapi", "flask"])
+        is_java_role = any(k in role_lower for k in ["java", "spring"])
+
+        wrong_plan = (is_java_plan and is_python_role) or (is_python_plan and is_java_role)
+        if wrong_plan:
+            # Delete stale plan and regenerate
+            db.delete(plan)
+            db.commit()
+            stub = LearningPlan(
+                student_id=payload.student_id,
+                company_name=target.company_name,
+                role=role,
+                days_available=days_available,
+                plan_signature=plan_signature,
+                status="generating",
+                plan_json={},
+            )
+            db.add(stub)
+            db.commit()
+            task_id = _enqueue_plan_generation(payload, target, days_available, role)
+            return PrepGenerateResponse(task_id=task_id, status="generating")
+
     if plan.status in TERMINAL_FAILURE_STATUSES:
         plan.status = "generating"
         db.commit()
@@ -245,6 +279,34 @@ def get_latest_prep_plan(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
+    # ── Return 404 for stub/generating plans so frontend polls ────────────
+    if plan.status == "generating":
+        raise HTTPException(status_code=404, detail="Plan is still generating")
+
+    # ── Return 404 for empty plan_json (stub created during activation) ───
+    daily_plan = (plan.plan_json or {}).get("daily_plan")
+    if not daily_plan or not isinstance(daily_plan, list) or len(daily_plan) == 0:
+        raise HTTPException(status_code=404, detail="Plan content not ready yet")
+
+    # ── Auto-detect wrong-role cached plan and invalidate it ──────────────
+    # If the plan overview mentions a different technology than the target role,
+    # mark it as failed so the frontend triggers regeneration.
+    if plan.status == "ready" and plan.plan_json:
+        overview = (plan.plan_json.get("overview") or "").lower()
+        role_lower = (target.role or "").lower()
+
+        is_java_plan = any(k in overview for k in ["java/spring", "java backend", "spring boot", "java fundamentals", "fallback 14-day java"])
+        is_python_role = any(k in role_lower for k in ["python", "django", "fastapi", "flask"])
+        is_python_plan = any(k in overview for k in ["python", "django", "fastapi", "flask"])
+        is_java_role = any(k in role_lower for k in ["java", "spring"])
+
+        wrong_plan = (is_java_plan and is_python_role) or (is_python_plan and is_java_role)
+        if wrong_plan:
+            # Delete stale plan — frontend will call /prep/generate to trigger fresh generation
+            db.delete(plan)
+            db.commit()
+            raise HTTPException(status_code=404, detail="Plan not found — wrong role content, regenerating")
+
     return PlanDetailResponse(
         plan_id=plan.id,
         student_id=plan.student_id,
@@ -264,9 +326,16 @@ def get_prep_status(
 ):
     """
     Get the status of learning plan generation for a student.
-    Returns: generating | ready | missing
-    Frontend can poll this endpoint instead of Celery task ID.
+    Returns: generating | ready | missing | failed
+
+    FALLBACK LOGIC:
+    If the plan has been in 'generating' state for > 2 minutes (Celery worker likely not running),
+    generate a role-aware fallback plan directly in this request (synchronous, no Celery needed).
+    This ensures students always get a plan even without a running worker.
     """
+    from app.services.plan_service import _generate_fallback_plan, build_plan_signature
+    from app.models import StudentProfile
+
     plan, target = _resolve_plan_for_target_id(db, student_id, target_id)
     if not target:
         return PrepGenerateResponse(task_id="", status="missing")
@@ -275,8 +344,104 @@ def get_prep_status(
         return PrepGenerateResponse(task_id="", status="generating")
 
     plan = _mark_stale_generating_as_failed(db, plan)
-    
+
+    # ── Fallback: generate plan directly if worker is stuck ──────────────
+    # If the plan has been generating for > FALLBACK_AFTER_MINUTES, the Celery worker
+    # is likely not running. Generate a role-aware fallback plan synchronously.
+    if plan.status == "generating":
+        fallback_cutoff = datetime.utcnow() - timedelta(minutes=FALLBACK_AFTER_MINUTES)
+        if plan.created_at < fallback_cutoff:
+            try:
+                profile = db.query(StudentProfile).filter(
+                    StudentProfile.student_id == student_id
+                ).first()
+                primary_skill = profile.primary_skill if profile else None
+                role = target.role or plan.role or "general"
+
+                fallback_data = _generate_fallback_plan(
+                    plan.days_available or 14,
+                    role=role,
+                    primary_skill=primary_skill,
+                )
+
+                plan.plan_json = fallback_data
+                plan.status = "ready"
+                plan.tasks_generated = 1
+                db.commit()
+                db.refresh(plan)
+
+                import logging
+                logging.getLogger(__name__).info(
+                    "[PREP-STATUS] Generated synchronous fallback plan for student_id=%s "
+                    "company=%s role=%s (worker was not running)",
+                    student_id, target.company_name, role
+                )
+            except Exception as fallback_exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "[PREP-STATUS] Fallback plan generation failed: %s", fallback_exc
+                )
+                # Mark as failed so frontend stops polling
+                plan.status = "failed"
+                db.commit()
+
     return PrepGenerateResponse(task_id=str(plan.id), status=plan.status)
+
+
+@router.delete("/reset/{student_id}", response_model=PrepGenerateResponse)
+def reset_prep_plan(
+    student_id: int,
+    target_id: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Delete cached plan and enqueue fresh generation.
+
+    Use this when:
+    - The cached plan has wrong content (e.g., Java plan for Python role)
+    - The student's target role or JD has changed
+    - Force-regenerate after a fallback plan was served
+
+    Deletes ALL plans for this student+company+role signature, then enqueues
+    a fresh Celery generation task.
+    """
+    target = (
+        db.query(TargetInterview)
+        .filter(TargetInterview.id == target_id)
+        .filter(TargetInterview.student_id == student_id)
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Target interview not found")
+
+    role = target.role or "general"
+    plan_signature = build_plan_signature(student_id, target.company_name, role)
+
+    # Delete ALL plans for this signature (including stale fallback plans)
+    deleted = (
+        db.query(LearningPlan)
+        .filter(LearningPlan.plan_signature == plan_signature)
+        .all()
+    )
+    for p in deleted:
+        db.delete(p)
+    db.commit()
+
+    # Create fresh stub and enqueue generation
+    stub = LearningPlan(
+        student_id=student_id,
+        company_name=target.company_name,
+        role=role,
+        days_available=14,
+        plan_signature=plan_signature,
+        status="generating",
+        plan_json={},
+    )
+    db.add(stub)
+    db.commit()
+
+    generate_plan_task.delay(student_id, target.company_name, 14, role)
+
+    return PrepGenerateResponse(task_id=str(stub.id), status="generating")
 
 
 @router.post("/code-report", response_model=CodeReportResponse)
@@ -288,13 +453,28 @@ def get_code_report(
     Generate an AI report analysing failed code testcases against course concepts.
     """
     try:
-        result = analyze_code_result(
+        result, usage = analyze_code_result(
             question=payload.question,
             code=payload.code,
             language=payload.language,
             test_results=payload.test_results,
             concepts_in_course=payload.concepts_in_course
         )
+
+        if usage:
+            try:
+                from app.services.usage_service import record_llm_usage
+                record_llm_usage(
+                    db=db,
+                    provider="openai" if "gpt" in usage["model"].lower() else "gemini",
+                    model=usage["model"],
+                    action="code_analysis",
+                    prompt_tokens=usage["prompt_tokens"],
+                    completion_tokens=usage["completion_tokens"],
+                    student_id=None # student_id not in payload
+                )
+            except Exception as usage_exc:
+                print(f"[CODE-REPORT-USAGE] Failed to record usage: {usage_exc}")
         return CodeReportResponse(
             analysis=result.get("analysis", "Error analyzing code."),
             lagging_skills=result.get("lagging_skills", [])

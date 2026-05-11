@@ -18,3 +18,4 @@ class LoginRequest(BaseModel):
 class AuthResponse(BaseModel):
     student_id: int
     student_name: str | None = None
+    primary_skill: str | None = None

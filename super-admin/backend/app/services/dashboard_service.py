@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, aliased
 
 from shared.models.admin_models import College, CollegeToken, TokenTransaction, User
+from shared.models.llm_usage import LLMUsageLog
 from shared.models.enums import CollegeStatus, TokenTransactionType
 
 
@@ -20,6 +21,14 @@ def get_dashboard_summary(db: Session):
 
     total_tokens_issued = int(token_totals[0] or 0)
     total_tokens_consumed = int(token_totals[1] or 0)
+
+    llm_stats = db.query(
+        func.coalesce(func.sum(LLMUsageLog.total_tokens), 0),
+        func.coalesce(func.sum(LLMUsageLog.cost_usd), 0.0),
+    ).one()
+
+    total_llm_tokens = int(llm_stats[0] or 0)
+    total_llm_cost_usd = float(llm_stats[1] or 0.0)
 
     actor = aliased(User)
 
@@ -50,5 +59,7 @@ def get_dashboard_summary(db: Session):
         "active_colleges": active_colleges,
         "total_tokens_issued": total_tokens_issued,
         "total_tokens_consumed": total_tokens_consumed,
+        "total_llm_tokens": total_llm_tokens,
+        "total_llm_cost_usd": total_llm_cost_usd,
         "recent_activity": recent_activity,
     }

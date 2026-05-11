@@ -2,89 +2,92 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, Suspense } from "react";
+// Module page — renders AI-generated day modules in the same rich Q&A + Quiz format
+// as the hardcoded study plan. No coding environment for day modules.
 
 /* ────────────────────────────────────────────────────
- *  SECTION-WISE Q & A DATA
- *  Each module has multiple sections, each with questions.
+ *  TYPES
  * ──────────────────────────────────────────────────── */
 
 interface Question {
   q: string;
   a: string;
+  explanation?: string;
+  detailedExplanation?: string;
+  transitionNote?: string | null;
+}
+
+interface QuizItem {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
 }
 
 interface Section {
   title: string;
   timeMinutes: number;
   questions: Question[];
+  quiz: QuizItem[];
+  concepts?: string[];
 }
 
+/* ────────────────────────────────────────────────────
+ *  FALLBACK HARDCODED SECTIONS
+ * ──────────────────────────────────────────────────── */
 const MODULE_SECTIONS: Record<string, Section[]> = {
   "Core Java fundamentals": [
     {
       title: "OOP Concepts",
       timeMinutes: 15,
+      concepts: ["Encapsulation", "Abstraction", "Inheritance", "Polymorphism"],
       questions: [
-        { q: "What are the four pillars of Object-Oriented Programming?", a: "The four pillars are: 1) Encapsulation — bundling data and methods that operate on the data within a class, restricting direct access. 2) Abstraction — hiding complex implementation details and showing only the necessary features. 3) Inheritance — a mechanism where one class acquires the properties of another. 4) Polymorphism — the ability of an object to take many forms (method overloading and overriding)." },
-        { q: "What is the difference between an abstract class and an interface in Java?", a: "An abstract class can have both abstract and concrete methods, instance variables, constructors, and can provide partial implementation. An interface (pre-Java 8) can only have abstract methods and constants. From Java 8+, interfaces support default and static methods. A class can implement multiple interfaces but can only extend one abstract class." },
-        { q: "Explain method overloading vs method overriding.", a: "Method Overloading (compile-time polymorphism): Same method name but different parameter lists within the same class. Method Overriding (runtime polymorphism): A subclass provides a specific implementation of a method already defined in its superclass with the same signature." },
-        { q: "What is the significance of the 'final' keyword in Java?", a: "final variable: Value cannot be changed once initialized. final method: Cannot be overridden by subclasses. final class: Cannot be extended/inherited." },
-        { q: "What is the difference between '==' and '.equals()' in Java?", a: "'==' compares reference (memory address) — checks if two variables point to the same object. '.equals()' compares value/content — checks if two objects are logically equivalent. For String, .equals() compares character content; == checks if they reference the same String object in memory." },
+        {
+          q: "What are the four pillars of Object-Oriented Programming?",
+          a: "Encapsulation, Abstraction, Inheritance, and Polymorphism.",
+          explanation: "These four pillars form the foundation of OOP design.",
+          detailedExplanation: "The Four OOP Pillars\n\nEncapsulation bundles data and methods within a class and restricts direct access to internal state. It protects data integrity and hides implementation details behind a clean interface.\n\nAbstraction hides complex implementation details and exposes only the necessary features. Abstract classes and interfaces in Java define contracts without revealing how they are fulfilled.\n\nInheritance allows a class to acquire properties and methods of another class. It promotes code reuse and establishes an IS-A relationship between classes.\n\nPolymorphism allows objects to take many forms. Method overloading (compile-time) and method overriding (runtime) are the two types. It enables writing flexible, extensible code."
+        },
+        {
+          q: "What is the difference between an abstract class and an interface in Java?",
+          a: "Abstract class: can have concrete methods, instance variables, constructors. Interface: only abstract methods (pre-Java 8), supports multiple implementation.",
+          explanation: "A class can implement multiple interfaces but extend only one abstract class.",
+          detailedExplanation: "Abstract Class vs Interface\n\nAn abstract class can have both abstract and concrete methods, instance variables, and constructors. It provides partial implementation and is used when classes share common state or behavior.\n\nAn interface (pre-Java 8) can only have abstract methods and constants. From Java 8+, interfaces support default and static methods. From Java 9+, private methods are also allowed.\n\nA class can implement multiple interfaces but can only extend one abstract class — this is Java's solution to the diamond problem.\n\nInterview trap: Use abstract class when you want to share code among closely related classes. Use interface when you want to define a contract that unrelated classes can implement."
+        },
+        {
+          q: "Explain method overloading vs method overriding.",
+          a: "Overloading: same name, different parameters (compile-time). Overriding: subclass redefines superclass method with same signature (runtime).",
+          explanation: "Overloading is resolved at compile time; overriding is resolved at runtime via dynamic dispatch.",
+          detailedExplanation: "Overloading vs Overriding\n\nMethod Overloading (compile-time polymorphism): Same method name but different parameter lists within the same class. The compiler determines which method to call based on the argument types at compile time.\n\nMethod Overriding (runtime polymorphism): A subclass provides a specific implementation of a method already defined in its superclass with the same signature. The JVM determines which method to call at runtime based on the actual object type.\n\nKey rules for overriding: same name, same parameters, same or covariant return type, cannot reduce visibility, cannot throw new checked exceptions.\n\nInterview trap: @Override annotation is optional but strongly recommended — it causes a compile error if you accidentally create an overload instead of an override."
+        },
+      ],
+      quiz: [
+        { question: "Which OOP pillar hides internal implementation details?", options: ["Inheritance", "Polymorphism", "Encapsulation", "Abstraction"], correctIndex: 3, explanation: "Abstraction hides complex implementation and exposes only necessary features. Encapsulation hides data; abstraction hides complexity." },
+        { question: "A class can extend how many abstract classes in Java?", options: ["Unlimited", "Two", "One", "Zero"], correctIndex: 2, explanation: "Java supports single inheritance — a class can extend only one abstract class, but can implement multiple interfaces." },
+        { question: "Method overriding is resolved at:", options: ["Compile time", "Runtime", "Link time", "Load time"], correctIndex: 1, explanation: "Method overriding uses dynamic dispatch — the JVM determines which method to call at runtime based on the actual object type." },
       ],
     },
     {
       title: "Collections Framework",
       timeMinutes: 20,
+      concepts: ["List vs Set vs Map", "ArrayList vs LinkedList", "HashMap vs TreeMap"],
       questions: [
-        { q: "What is the Java Collections Framework? Name the main interfaces.", a: "The Collections Framework is a unified architecture for representing and manipulating collections. Main interfaces: Collection (root), List (ordered, allows duplicates), Set (no duplicates), Queue (FIFO), Map (key-value pairs), Deque (double-ended queue)." },
-        { q: "What is the difference between ArrayList and LinkedList?", a: "ArrayList uses a dynamic array internally — O(1) random access, O(n) insertions/deletions in the middle. LinkedList uses a doubly linked list — O(n) random access, O(1) insertions/deletions when you have a reference to the node. ArrayList is better for read-heavy, LinkedList for write-heavy operations." },
-        { q: "Explain the difference between HashMap and TreeMap.", a: "HashMap: Uses hashing, O(1) average lookup/insert, unordered, allows one null key. TreeMap: Uses Red-Black tree, O(log n) operations, keys are sorted in natural order (or custom Comparator), does not allow null keys." },
-        { q: "What is the difference between HashSet and TreeSet?", a: "HashSet: Uses HashMap internally, O(1) operations, unordered, allows one null element. TreeSet: Uses TreeMap internally, O(log n) operations, elements sorted in natural order, does not allow null." },
-        { q: "What is a ConcurrentHashMap and when would you use it?", a: "ConcurrentHashMap is a thread-safe version of HashMap. Unlike Hashtable, it divides the map into segments and only locks the segment being modified, allowing concurrent reads and writes. Use it in multi-threaded environments where you need high read/write throughput." },
-        { q: "What is the difference between Iterator and ListIterator?", a: "Iterator: Can traverse a collection in forward direction only, supports remove(). ListIterator: Can traverse a List in both directions (forward and backward), supports add(), set(), and remove(), and provides index-based access." },
+        {
+          q: "What is the difference between ArrayList and LinkedList?",
+          a: "ArrayList: dynamic array, O(1) random access, O(n) insert/delete. LinkedList: doubly linked list, O(n) access, O(1) insert/delete at known position.",
+          explanation: "ArrayList is better for read-heavy; LinkedList for write-heavy operations.",
+          detailedExplanation: "ArrayList vs LinkedList\n\nArrayList uses a dynamic array internally. It provides O(1) random access by index, making it ideal for read-heavy workloads. However, insertions and deletions in the middle require shifting elements — O(n) time.\n\nLinkedList uses a doubly linked list. Each node stores a reference to the previous and next node. Random access is O(n) since you must traverse from the head. But insertions and deletions at a known position are O(1).\n\nIn practice, ArrayList outperforms LinkedList for most use cases due to better cache locality. The JVM can prefetch contiguous memory (ArrayList) more efficiently than scattered nodes (LinkedList).\n\nInterview trap: LinkedList also implements the Deque interface, making it useful as a stack or queue. But for pure queue operations, ArrayDeque is faster than LinkedList."
+        },
+        {
+          q: "Explain the difference between HashMap and TreeMap.",
+          a: "HashMap: O(1) average, unordered, allows null key. TreeMap: O(log n), sorted by key, no null key.",
+          explanation: "Use HashMap for fast lookups; TreeMap when you need sorted key order.",
+          detailedExplanation: "HashMap vs TreeMap\n\nHashMap uses hashing to store key-value pairs. It provides O(1) average-case time for get, put, and remove. Keys are unordered. Allows one null key and multiple null values. Not thread-safe.\n\nTreeMap uses a Red-Black tree (self-balancing BST). All operations are O(log n). Keys are sorted in natural order or by a custom Comparator. Does not allow null keys (throws NullPointerException).\n\nLinkedHashMap is a middle ground — maintains insertion order with O(1) operations, useful for LRU cache implementations.\n\nInterview trap: HashMap's O(1) is average case. In the worst case (all keys hash to the same bucket), it degrades to O(n). Java 8+ converts buckets to balanced trees when they exceed 8 entries, improving worst case to O(log n)."
+        },
       ],
-    },
-    {
-      title: "Streams & Lambdas",
-      timeMinutes: 15,
-      questions: [
-        { q: "What are Java Streams and how are they different from Collections?", a: "Streams represent a sequence of elements that support sequential and parallel operations. Unlike Collections, Streams don't store data — they process data from a source. Streams are lazy (intermediate operations are deferred), can be parallelized easily, and are consumed only once." },
-        { q: "What is a lambda expression in Java?", a: "A lambda expression is an anonymous function that implements a functional interface. Syntax: (parameters) -> expression or (parameters) -> { statements }. Example: (a, b) -> a + b. They enable functional programming, reduce boilerplate, and are commonly used with Streams API." },
-        { q: "Explain the difference between map() and flatMap() in Streams.", a: "map(): Transforms each element to exactly one output element — one-to-one mapping. flatMap(): Transforms each element to zero or more elements and flattens the result into a single stream — one-to-many mapping followed by flattening. Example: map to convert Stream<String> to Stream<Integer> (lengths), flatMap to convert Stream<List<String>> to Stream<String>." },
-        { q: "What are the terminal operations in Java Streams?", a: "Terminal operations trigger stream processing and produce a result or side-effect. Common ones: collect() — accumulate into a collection, forEach() — iterate, reduce() — combine elements, count() — count elements, findFirst()/findAny() — find elements, allMatch()/anyMatch()/noneMatch() — boolean checks, min()/max() — extremes, toArray() — convert to array." },
-        { q: "What is Optional in Java and why is it used?", a: "Optional<T> is a container that may or may not hold a non-null value. It's used to avoid NullPointerException and make APIs clearer about nullable return values. Key methods: of(), ofNullable(), isPresent(), ifPresent(), orElse(), orElseGet(), orElseThrow(), map(), flatMap()." },
-      ],
-    },
-  ],
-  "Spring Boot + microservices": [
-    {
-      title: "Spring Boot Basics",
-      timeMinutes: 15,
-      questions: [
-        { q: "What is Spring Boot and how does it differ from Spring Framework?", a: "Spring Boot is an opinionated framework that simplifies Spring application development. Key differences: Auto-configuration (convention over configuration), embedded server (Tomcat/Jetty), starter dependencies, no XML configuration needed, Spring Boot Actuator for production monitoring." },
-        { q: "What are Spring Boot Starters?", a: "Starters are curated dependency descriptors. spring-boot-starter-web includes everything for web apps (Spring MVC, Tomcat, Jackson). spring-boot-starter-data-jpa includes JPA, Hibernate, Spring Data JPA. They simplify Maven/Gradle configuration by bundling compatible versions." },
-        { q: "Explain the @SpringBootApplication annotation.", a: "@SpringBootApplication combines three annotations: @Configuration — marks the class as a source of bean definitions. @EnableAutoConfiguration — tells Spring Boot to auto-configure based on classpath. @ComponentScan — enables component scanning in the current package and sub-packages." },
-        { q: "What is Spring Boot Actuator?", a: "Actuator provides production-ready features: /health — application health status, /info — application info, /metrics — application metrics, /env — environment properties, /loggers — logger configuration. It enables monitoring and management of Spring Boot apps." },
-      ],
-    },
-    {
-      title: "REST API Development",
-      timeMinutes: 15,
-      questions: [
-        { q: "What are the main HTTP methods used in RESTful APIs?", a: "GET — retrieve data, POST — create new resources, PUT — update/replace entire resource, PATCH — partially update resource, DELETE — remove resource. Each method should be idempotent (except POST) and follow REST conventions." },
-        { q: "What is the difference between @Controller and @RestController?", a: "@Controller returns view names (for MVC/template rendering). @RestController = @Controller + @ResponseBody — every method returns data directly in the response body (JSON/XML). Use @RestController for REST APIs, @Controller for server-side rendered pages." },
-        { q: "Explain @RequestMapping, @GetMapping, @PostMapping annotations.", a: "@RequestMapping is the parent annotation for mapping HTTP requests. @GetMapping = @RequestMapping(method = GET), @PostMapping = @RequestMapping(method = POST). They simplify code and make intent clearer. Can include path, params, headers, consumes, produces attributes." },
-        { q: "How do you handle exceptions globally in Spring Boot?", a: "Use @ControllerAdvice + @ExceptionHandler for global exception handling. Create a class annotated with @ControllerAdvice containing methods annotated with @ExceptionHandler(SpecificException.class). Return ResponseEntity with appropriate HTTP status codes and error messages." },
-      ],
-    },
-    {
-      title: "JPA & Docker",
-      timeMinutes: 15,
-      questions: [
-        { q: "What is JPA and how does Spring Data JPA simplify it?", a: "JPA (Java Persistence API) is a specification for ORM (Object-Relational Mapping). Spring Data JPA provides: Repository pattern (CrudRepository, JpaRepository), automatic query generation from method names, @Query for custom queries, pagination and sorting support." },
-        { q: "What are the main JPA annotations?", a: "@Entity — marks a class as a JPA entity. @Table — specifies the database table. @Id — marks the primary key. @GeneratedValue — auto-generation strategy. @Column — column mapping. @OneToMany, @ManyToOne, @ManyToMany — relationship mappings. @JoinColumn — foreign key column." },
-        { q: "What is Docker and how is it used in microservices?", a: "Docker is a containerization platform. Dockerfile defines the build steps. Docker images are immutable templates. Containers are running instances. docker-compose manages multi-container apps. Benefits: consistent environments, isolated services, scalable deployments, easy CI/CD." },
-        { q: "What is the difference between Docker image and container?", a: "Image: Read-only template with application code, runtime, libraries. Created from Dockerfile. Immutable and shareable. Container: Running instance of an image. Has a writable layer. Isolated process with its own filesystem, network, and process space. Multiple containers can run from the same image." },
+      quiz: [
+        { question: "Which collection maintains insertion order?", options: ["HashSet", "TreeSet", "LinkedHashMap", "HashMap"], correctIndex: 2, explanation: "LinkedHashMap maintains insertion order while providing O(1) operations." },
+        { question: "TreeMap keys are:", options: ["Unordered", "Sorted by insertion", "Sorted naturally or by Comparator", "Random"], correctIndex: 2, explanation: "TreeMap sorts keys in natural order (Comparable) or by a custom Comparator provided at construction time." },
       ],
     },
   ],
@@ -92,52 +95,17 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
     {
       title: "Arrays & Strings",
       timeMinutes: 20,
+      concepts: ["Two Pointer", "Sliding Window", "Kadane's Algorithm"],
       questions: [
-        { q: "How do you find the maximum subarray sum? (Kadane's Algorithm)", a: "Kadane's Algorithm: Initialize maxSoFar = arr[0], maxEndingHere = arr[0]. Traverse from index 1: maxEndingHere = max(arr[i], maxEndingHere + arr[i]), maxSoFar = max(maxSoFar, maxEndingHere). Time: O(n), Space: O(1)." },
-        { q: "How do you detect duplicate elements in an array?", a: "Multiple approaches: 1) HashSet — add elements, check if already exists, O(n) time, O(n) space. 2) Sort first — adjacent duplicates, O(n log n) time, O(1) space. 3) For range [0, n-1], use array as hashmap with index marking." },
-        { q: "How do you reverse a string in-place?", a: "Two-pointer approach: left = 0, right = length - 1. Swap characters at left and right, increment left, decrement right. Continue until left >= right. Time: O(n), Space: O(1)." },
-        { q: "What is the Two Pointer technique? Give an example.", a: "Two pointers iterate from different positions to solve problems efficiently. Example: Finding a pair with given sum in a sorted array — left pointer starts at 0, right at end. If sum < target, move left right. If sum > target, move right left. O(n) time vs O(n²) brute force." },
+        {
+          q: "What is the Two Pointer technique?",
+          a: "Two pointers iterate from different positions to solve problems in O(n) instead of O(n²).",
+          explanation: "Example: finding pair sum in sorted array. Left at start, right at end.",
+          detailedExplanation: "Two Pointer Technique\n\nThe Two Pointer technique uses two references that move through a sorted array to solve problems that would otherwise require nested loops, reducing O(n²) to O(n).\n\nConverging pointers: place one at the start and one at the end. To find a pair that sums to a target: if sum is too small, move left pointer right; if too large, move right pointer left.\n\nFast-slow pointer: two pointers start at the same position but move at different speeds. Used in linked list cycle detection (Floyd's tortoise and hare) and finding the middle of a linked list.\n\nInterview trap: Two pointers only work on sorted arrays for pair-sum problems. For unsorted arrays, use a HashMap instead."
+        },
       ],
-    },
-    {
-      title: "Trees & Graphs",
-      timeMinutes: 20,
-      questions: [
-        { q: "What are the different tree traversal methods?", a: "Inorder (Left, Root, Right) — gives sorted order for BST. Preorder (Root, Left, Right) — used for copying trees. Postorder (Left, Right, Root) — used for deletion. Level-order (BFS) — uses a queue, visits level by level." },
-        { q: "What is a Binary Search Tree (BST)? What are its properties?", a: "BST is a binary tree where: Left subtree contains only nodes with keys less than the node's key. Right subtree contains only nodes with keys greater than the node's key. Both subtrees are also BSTs. Operations: Search, Insert, Delete — all O(h) where h = height. Balanced BST: O(log n)." },
-        { q: "Explain BFS and DFS for graph traversal.", a: "BFS (Breadth-First Search): Uses queue, explores neighbors first, finds shortest path in unweighted graphs. O(V+E). DFS (Depth-First Search): Uses stack/recursion, explores as deep as possible first, used for cycle detection, topological sort. O(V+E)." },
-        { q: "What is a balanced binary tree? Name some types.", a: "A balanced tree ensures height is O(log n). Types: AVL Tree — strictly balanced (height difference ≤ 1 for every node). Red-Black Tree — loosely balanced with color properties. B-Tree — used in databases, multiple keys per node. Splay Tree — self-adjusting with amortized O(log n)." },
-      ],
-    },
-    {
-      title: "Dynamic Programming",
-      timeMinutes: 20,
-      questions: [
-        { q: "What is Dynamic Programming? When should you use it?", a: "DP is an optimization technique for problems with: 1) Overlapping subproblems — same subproblem solved multiple times. 2) Optimal substructure — optimal solution built from optimal sub-solutions. Approaches: Top-down (memoization with recursion) or Bottom-up (tabulation with iteration)." },
-        { q: "Explain the Fibonacci sequence using DP.", a: "Naive recursion: O(2^n). Memoization (top-down): Store results in array, fib(n) = fib(n-1) + fib(n-2), O(n) time, O(n) space. Tabulation (bottom-up): Build array from 0 to n, dp[i] = dp[i-1] + dp[i-2], O(n) time, O(n) space. Space-optimized: Only keep last two values, O(1) space." },
-        { q: "What is the 0/1 Knapsack problem?", a: "Given n items with weights and values, maximize total value in a knapsack of capacity W. Each item can be taken or left (0/1). DP solution: dp[i][w] = max(dp[i-1][w], dp[i-1][w-wt[i]] + val[i]). Time: O(n×W), Space: O(n×W) or O(W) optimized." },
-        { q: "Explain the Longest Common Subsequence (LCS) problem.", a: "Find the longest subsequence common to two strings. DP approach: If chars match (s1[i] == s2[j]): dp[i][j] = 1 + dp[i-1][j-1]. If not: dp[i][j] = max(dp[i-1][j], dp[i][j-1]). Time: O(m×n), Space: O(m×n). Backtrack to find the actual LCS string." },
-      ],
-    },
-  ],
-  "SQL + database design": [
-    {
-      title: "SQL Queries",
-      timeMinutes: 20,
-      questions: [
-        { q: "What is the difference between INNER JOIN and OUTER JOIN?", a: "INNER JOIN returns only matching rows from both tables. LEFT OUTER JOIN: All rows from left + matching from right (NULL for non-matches). RIGHT OUTER JOIN: All rows from right + matching from left. FULL OUTER JOIN: All rows from both, NULLs where no match." },
-        { q: "What is the difference between WHERE and HAVING?", a: "WHERE filters individual rows before grouping (cannot use aggregate functions). HAVING filters groups after GROUP BY (can use aggregate functions like COUNT, SUM, AVG). Example: SELECT dept, COUNT(*) FROM emp WHERE salary > 50000 GROUP BY dept HAVING COUNT(*) > 5." },
-        { q: "Explain GROUP BY and aggregate functions.", a: "GROUP BY groups rows with same values in specified columns. Aggregate functions operate on groups: COUNT() — number of rows, SUM() — total, AVG() — average, MIN()/MAX() — extremes. Every non-aggregated column in SELECT must be in GROUP BY." },
-        { q: "What is the difference between UNION and UNION ALL?", a: "UNION combines results from two SELECT statements and removes duplicates (slower). UNION ALL combines results and keeps all rows including duplicates (faster). Both require same number of columns with compatible data types." },
-      ],
-    },
-    {
-      title: "Indexing & Optimization",
-      timeMinutes: 15,
-      questions: [
-        { q: "What is an index in databases? How does it work?", a: "An index is a data structure (usually B-Tree or Hash) that speeds up data retrieval. Like a book index — instead of scanning every page, jump directly. Trade-offs: Faster reads, slower writes (index must be updated), extra storage space." },
-        { q: "What are the types of indexes?", a: "Primary Index: On primary key, unique and clustered. Unique Index: Ensures no duplicate values. Composite Index: On multiple columns. Clustered Index: Determines physical order of data (one per table). Non-Clustered Index: Separate structure pointing to data (multiple per table)." },
-        { q: "How do you optimize a slow SQL query?", a: "1) Use EXPLAIN/EXPLAIN ANALYZE to see query plan. 2) Add appropriate indexes. 3) Avoid SELECT * — specify needed columns. 4) Use WHERE to filter early. 5) Optimize JOINs — join on indexed columns. 6) Avoid subqueries when JOINs work. 7) Use LIMIT for pagination. 8) Consider denormalization for read-heavy tables." },
+      quiz: [
+        { question: "Two Pointer technique works best on:", options: ["Unsorted arrays", "Sorted arrays", "Linked lists only", "Hash maps"], correctIndex: 1, explanation: "Two Pointer works most effectively on sorted arrays where pointer movement can be guided by comparison with the target." },
       ],
     },
   ],
@@ -145,41 +113,68 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
     {
       title: "Behavioral Questions",
       timeMinutes: 15,
+      concepts: ["Tell Me About Yourself", "STAR Method", "Company Research"],
       questions: [
-        { q: "Tell me about yourself.", a: "Structure: Present → Past → Future. Start with current role/studies, mention relevant experience, highlight key skills, connect to the position you're interviewing for. Keep it 60-90 seconds. Focus on professional journey, not personal details." },
-        { q: "Tell me about a time you faced a challenge and how you overcame it.", a: "Use the STAR method: Situation — describe the context. Task — what was your responsibility. Action — what specific steps did you take. Result — what was the outcome (quantify if possible). Choose a challenge that shows resilience, problem-solving, and growth." },
-        { q: "Why do you want to work at this company?", a: "Research the company: products, culture, recent news. Connect your skills and goals to their mission. Show genuine enthusiasm. Example structure: 'I admire [specific thing about company]. My experience in [relevant skill] aligns with your [project/team]. I'm excited about [future opportunity at company].'" },
-        { q: "What are your strengths and weaknesses?", a: "Strengths: Pick 2-3 relevant to the role, provide examples. Weaknesses: Choose a genuine area for improvement, show self-awareness, explain what you're doing to improve. Avoid clichés like 'perfectionist'. Example: 'I sometimes spend too much time on details, but I've learned to set time-boxes for tasks.'" },
+        {
+          q: "Tell me about yourself.",
+          a: "Structure: Present → Past → Future. 60-90 seconds, professional focus.",
+          explanation: "Start with current role/studies, mention relevant experience, highlight key skills, connect to the target position.",
+          detailedExplanation: "Your Professional Elevator Pitch\n\nThis is almost always the opening question. The best structure is Present → Past → Future: start with who you are now (current role, education), briefly mention relevant background (projects, internships, key achievements), and end with what you're looking for.\n\nKeep it to 60-90 seconds. Every sentence should be intentional — avoid personal details unless they directly relate to the role. Focus on your technical identity.\n\nTailor your answer to the company and role. Research the company's tech stack and mirror it in your narrative.\n\nEnd with a bridge to the role: 'I'm excited about this position because it aligns with my expertise and career goals.'"
+        },
       ],
-    },
-    {
-      title: "Technical Discussion",
-      timeMinutes: 15,
-      questions: [
-        { q: "Explain a project you've worked on recently.", a: "Structure: What the project is → Your role → Technologies used → Challenges faced → Results/learnings. Be specific about YOUR contribution. Quantify impact if possible (performance improvement, user count, etc.). Practice explaining technical concepts simply." },
-        { q: "How do you approach debugging a production issue?", a: "1) Reproduce the issue if possible. 2) Check logs and error messages. 3) Isolate the problem — which component/service? 4) Form hypotheses. 5) Test systematically. 6) Fix and verify. 7) Add monitoring/alerts to prevent recurrence. 8) Post-mortem to document learnings." },
-        { q: "What is your preferred development workflow?", a: "Describe: Version control (Git branching strategy), code review process, testing approach (unit, integration, e2e), CI/CD pipeline, documentation practices. Show you understand professional development practices beyond just writing code." },
-      ],
-    },
-    {
-      title: "HR Round",
-      timeMinutes: 10,
-      questions: [
-        { q: "What are your salary expectations?", a: "Research market rates for the role. Provide a range based on research. Consider total compensation (base, bonuses, benefits). Example: 'Based on my research and experience, I'm looking in the range of X-Y LPA, but I'm open to discussion based on the complete compensation package.'" },
-        { q: "Where do you see yourself in 5 years?", a: "Show ambition aligned with the company's growth. Mention skill development, leadership aspirations, and domain expertise. Example: 'I see myself as a senior engineer contributing to architecture decisions, mentoring junior developers, and driving impactful projects in [relevant domain].'" },
-        { q: "Do you have any questions for us?", a: "Always have 2-3 prepared questions: About the team (size, structure, collaboration), about the role (day-to-day, first 90 days expectations), about growth (learning opportunities, career paths), about the product/technology stack. Avoid questions about salary/benefits in initial rounds." },
+      quiz: [
+        { question: "STAR stands for:", options: ["Story, Task, Action, Review", "Situation, Task, Action, Result", "Summary, Time, Action, Response", "Situation, Topic, Answer, Result"], correctIndex: 1, explanation: "STAR: Situation (context), Task (your responsibility), Action (what you did), Result (measurable outcome)." },
       ],
     },
   ],
 };
 
-/* ────────────────── TIMER COMPONENT ────────────────── */
+/* ────────────────────────────────────────────────────
+ *  HELPERS
+ * ──────────────────────────────────────────────────── */
+
+const POINT_COLORS = ["#7c3aed", "#059669", "#f59e0b", "#3b82f6", "#ef4444", "#ec4899"];
+
+/** Parse multi-paragraph explanation into structured paragraphs */
+function parseExplanationParagraphs(text: string): { heading: string; body: string }[] {
+  if (!text) return [];
+  const parts = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  return parts.map((part) => {
+    const newlineIdx = part.indexOf('\n');
+    if (newlineIdx === -1) {
+      // Single line — check if it's "Heading: body"
+      const colonIdx = part.indexOf(':');
+      if (colonIdx > 0 && colonIdx < 40) {
+        return { heading: part.slice(0, colonIdx).trim(), body: part.slice(colonIdx + 1).trim() };
+      }
+      return { heading: '', body: part };
+    }
+    // First line is heading, rest is body
+    return { heading: part.slice(0, newlineIdx).trim(), body: part.slice(newlineIdx + 1).trim() };
+  });
+}
+
+/** Generate fallback quiz from questions when AI didn't provide one */
+function generateFallbackQuiz(questions: Question[]): QuizItem[] {
+  return questions.slice(0, 3).map((q) => ({
+    question: `Which best describes: "${q.q.slice(0, 70)}${q.q.length > 70 ? '…' : ''}"?`,
+    options: [
+      q.a.slice(0, 90) + (q.a.length > 90 ? '…' : ''),
+      "It is not relevant to this topic.",
+      "It only applies to advanced scenarios.",
+      "It is the opposite of what is described.",
+    ],
+    correctIndex: 0,
+    explanation: q.explanation || q.a,
+  }));
+}
+
+import { getLatestPrep } from "@/src/lib/api";
+/* ------------------ TIMER COMPONENT ------------------ */
 function Timer({ totalSeconds, onExpire }: { totalSeconds: number; onExpire: () => void }) {
   const [remaining, setRemaining] = useState(totalSeconds);
 
-  useEffect(() => {
-    setRemaining(totalSeconds);
-  }, [totalSeconds]);
+  useEffect(() => { setRemaining(totalSeconds); }, [totalSeconds]);
 
   useEffect(() => {
     if (remaining <= 0) { onExpire(); return; }
@@ -208,43 +203,242 @@ function Timer({ totalSeconds, onExpire }: { totalSeconds: number; onExpire: () 
   );
 }
 
-/* ────────────────── MAIN MODULE CONTENT ────────────────── */
+/* ------------------ QUIZ COMPONENT ------------------ */
+function QuizSection({ quiz, onComplete }: { quiz: QuizItem[]; onComplete: () => void }) {
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSelect = (qIdx: number, optIdx: number) => {
+    if (submitted) return;
+    setAnswers(prev => ({ ...prev, [qIdx]: optIdx }));
+  };
+
+  const allAnswered = Object.keys(answers).length === quiz.length;
+  const score = quiz.filter((q, i) => answers[i] === q.correctIndex).length;
+
+  return (
+    <div className="mt-8 border-t border-slate-100 pt-8">
+      <div className="flex items-center gap-2 mb-6">
+        <div className="w-8 h-8 rounded-xl bg-violet-600 flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div>
+          <h3 className="text-[15px] font-bold text-slate-800">Section Quiz</h3>
+          <p className="text-[11px] text-slate-400">{quiz.length} questions � test your understanding</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {quiz.map((item, qIdx) => {
+          const selected = answers[qIdx];
+          const isCorrect = submitted && selected === item.correctIndex;
+          const isWrong = submitted && selected !== undefined && selected !== item.correctIndex;
+
+          return (
+            <div key={qIdx} className={`rounded-2xl border p-5 transition-all ${submitted && isCorrect ? "border-emerald-200 bg-emerald-50/40" : submitted && isWrong ? "border-red-200 bg-red-50/30" : "border-slate-200 bg-white"}`}>
+              <p className="text-[14px] font-semibold text-slate-800 mb-4 leading-snug">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold mr-2">{qIdx + 1}</span>
+                {item.question}
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                {item.options.map((opt, oIdx) => {
+                  const isSelected = selected === oIdx;
+                  const isCorrectOpt = item.correctIndex === oIdx;
+                  let cls = "px-4 py-3 rounded-xl border text-[13px] font-medium cursor-pointer transition-all text-left ";
+                  if (!submitted) {
+                    cls += isSelected
+                      ? "border-violet-400 bg-violet-50 text-violet-800 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-violet-200 hover:bg-violet-50/30";
+                  } else {
+                    if (isCorrectOpt) cls += "border-emerald-400 bg-emerald-50 text-emerald-800 font-bold";
+                    else if (isSelected && !isCorrectOpt) cls += "border-red-300 bg-red-50 text-red-700 line-through";
+                    else cls += "border-slate-100 bg-slate-50 text-slate-400";
+                  }
+                  return (
+                    <button key={oIdx} className={cls} onClick={() => handleSelect(qIdx, oIdx)}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-current text-[10px] font-bold mr-2 shrink-0">
+                        {String.fromCharCode(65 + oIdx)}
+                      </span>
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              {submitted && (
+                <div className="mt-3 px-4 py-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">Explanation</p>
+                  <p className="text-[13px] text-slate-600 leading-relaxed">{item.explanation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!submitted ? (
+        <button
+          onClick={() => setSubmitted(true)}
+          disabled={!allAnswered}
+          className={`mt-6 w-full py-3 rounded-xl font-bold text-[14px] transition-all ${allAnswered ? "bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-200" : "bg-slate-100 text-slate-300 cursor-not-allowed"}`}
+        >
+          Submit Quiz
+        </button>
+      ) : (
+        <div className="mt-6 p-5 rounded-2xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-100 flex items-center justify-between">
+          <div>
+            <p className="text-[13px] font-bold text-slate-700">
+              Score: <span className={score === quiz.length ? "text-emerald-600" : score >= quiz.length / 2 ? "text-amber-600" : "text-red-600"}>{score}/{quiz.length}</span>
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {score === quiz.length ? "Perfect! All correct." : score >= quiz.length / 2 ? "Good job! Review the explanations above." : "Review the section and try again."}
+            </p>
+          </div>
+          <button
+            onClick={onComplete}
+            className="px-6 py-2.5 rounded-xl bg-slate-900 text-white text-[13px] font-bold hover:bg-slate-800 transition shadow-sm"
+          >
+            Continue ?
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------ MAIN MODULE CONTENT ------------------ */
 function ModuleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const moduleTitle = searchParams.get("title") || "Core Java fundamentals";
-  const company = searchParams.get("company") || "TCS";
+  const moduleTitle = searchParams.get("title") || "Learning Module";
+  const company = searchParams.get("company") || "Your Target Company";
+  const dayNum = searchParams.get("day");
 
-  const sections = MODULE_SECTIONS[moduleTitle] || MODULE_SECTIONS["Core Java fundamentals"];
-
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loading, setLoading] = useState(true);
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
-  const [completedSections, setCompletedSections] = useState<boolean[]>(new Array(sections.length).fill(false));
+  const [completedSections, setCompletedSections] = useState<boolean[]>([]);
   const [timerExpired, setTimerExpired] = useState(false);
   const [allDone, setAllDone] = useState(false);
+  const [quizDone, setQuizDone] = useState(false);
+
+  useEffect(() => {
+    async function loadDynamicContent() {
+      try {
+        if (!dayNum) {
+          // Fallback to hardcoded if no day param (legacy support)
+          const fallback = MODULE_SECTIONS[moduleTitle] || MODULE_SECTIONS["Core Java fundamentals"];
+          setSections(fallback);
+          setCompletedSections(new Array(fallback.length).fill(false));
+          setLoading(false);
+          return;
+        }
+
+        const studentId = parseInt(sessionStorage.getItem("student_id") || "0");
+        const targetId = parseInt(sessionStorage.getItem("target_id") || "0");
+
+        if (!studentId || !targetId) throw new Error("Session context missing");
+
+        const plan = await getLatestPrep(studentId, targetId);
+        const dayData = plan.plan_json.daily_plan.find((d: any) => d.day === parseInt(dayNum));
+
+        if (dayData) {
+          // Map every task (regardless of task_type) to a Q&A section
+          // Code tasks are shown as Q&A using their qa_pairs, NOT as a coding editor
+          const dynamicSections: Section[] = dayData.tasks.map((task: any) => {
+            // Build questions from qa_pairs
+            const questions: Question[] = [];
+            if (task.qa_pairs && task.qa_pairs.length > 0) {
+              task.qa_pairs.forEach((qa: any) => {
+                const rawExp = qa.explanation || qa.answer || task.description || "";
+                const richExp = rawExp.includes('\n\n') ? rawExp : `${task.title}\n\n${rawExp}`;
+                questions.push({
+                  q: qa.question,
+                  a: qa.answer,
+                  explanation: rawExp,
+                  detailedExplanation: richExp,
+                  transitionNote: qa.transition_note || null,
+                });
+              });
+            } else {
+              // Fallback: use task title/description as a single Q&A card
+              questions.push({
+                q: task.title,
+                a: task.description,
+                explanation: task.description,
+                detailedExplanation: `${task.title}\n\n${task.description}`,
+              });
+            }
+
+            // Build quiz from task.quiz
+            const quiz: QuizItem[] = [];
+            if (task.quiz && task.quiz.length > 0) {
+              task.quiz.forEach((qz: any) => {
+                quiz.push({
+                  question: qz.question,
+                  options: qz.options || [],
+                  correctIndex: qz.correct_index ?? qz.correctIndex ?? 0,
+                  explanation: qz.explanation || "See the section for details.",
+                });
+              });
+            } else {
+              // Generate fallback quiz from questions
+              const fallback = generateFallbackQuiz(questions);
+              quiz.push(...fallback);
+            }
+
+            // Concepts from qa_pairs questions (first 5)
+            const concepts = task.qa_pairs && task.qa_pairs.length > 0
+              ? task.qa_pairs.slice(0, 5).map((qa: any) => qa.question.slice(0, 45) + (qa.question.length > 45 ? '�' : ''))
+              : [task.title];
+
+            return {
+              title: task.title,
+              timeMinutes: task.duration_minutes || 20,
+              questions,
+              quiz,
+              concepts,
+            };
+          });
+
+          setSections(dynamicSections);
+          setCompletedSections(new Array(dynamicSections.length).fill(false));
+        } else {
+          setSections([]);
+        }
+      } catch (err) {
+        console.error("Module load error:", err);
+        // Fallback to hardcoded
+        const fallback = MODULE_SECTIONS[moduleTitle] || MODULE_SECTIONS["Core Java fundamentals"];
+        setSections(fallback);
+        setCompletedSections(new Array(fallback.length).fill(false));
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDynamicContent();
+  }, [dayNum, moduleTitle]);
 
   const currentSection = sections[currentSectionIdx];
-  const totalQuestions = currentSection.questions.length;
+  const totalQuestions = currentSection?.questions.length || 0;
   const answeredCount = Object.keys(revealedAnswers).length;
-  const allRevealed = answeredCount === totalQuestions;
+  const allRevealed = answeredCount >= totalQuestions && totalQuestions > 0;
 
   const toggleAnswer = (idx: number) => {
     setRevealedAnswers((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  const handleTimerExpire = useCallback(() => {
-    setTimerExpired(true);
-  }, []);
+  const handleTimerExpire = useCallback(() => { setTimerExpired(true); }, []);
 
   const handleCompleteSection = () => {
     const updated = [...completedSections];
     updated[currentSectionIdx] = true;
     setCompletedSections(updated);
-
     if (currentSectionIdx < sections.length - 1) {
       setCurrentSectionIdx(currentSectionIdx + 1);
       setRevealedAnswers({});
       setTimerExpired(false);
+      setQuizDone(false);
     } else {
       setAllDone(true);
     }
@@ -255,20 +449,40 @@ function ModuleContent() {
       setCurrentSectionIdx(idx);
       setRevealedAnswers({});
       setTimerExpired(false);
+      setQuizDone(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse">Loading module content...</p>
+      </div>
+    );
+  }
+
+  if (sections.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Module Not Found</h2>
+        <p className="text-slate-500 mb-6">We couldn't load the content for this module.</p>
+        <button onClick={() => router.push("/study-plan")} className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition">Return to Roadmap</button>
+      </div>
+    );
+  }
+
   if (allDone) {
     return (
-      <div className="animate-fade-in w-full max-w-4xl mx-auto py-10">
+      <div className="w-full max-w-4xl mx-auto py-10">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
           <div className="w-20 h-20 rounded-full bg-emerald-100 mx-auto flex items-center justify-center mb-6">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>Module Complete!</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Module Complete!</h2>
           <p className="text-slate-500 text-[15px] mb-2">You've finished all {sections.length} sections in <strong>{moduleTitle}</strong>.</p>
           <p className="text-slate-400 text-sm mb-8">Great work! Keep preparing for your interview.</p>
-          <button onClick={() => router.push("/study-plan")} className="btn-primary px-8 py-3 text-[15px]">
+          <button onClick={() => router.push("/study-plan")} className="px-8 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 text-[15px]">
             Back to Study Plan
           </button>
         </div>
@@ -276,8 +490,12 @@ function ModuleContent() {
     );
   }
 
+  const paragraphs = parseExplanationParagraphs(
+    currentSection?.questions[0]?.detailedExplanation || ""
+  );
+
   return (
-    <div className="animate-fade-in w-full max-w-5xl mx-auto py-4">
+    <div className="w-full max-w-5xl mx-auto py-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -285,11 +503,11 @@ function ModuleContent() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>{moduleTitle}</h1>
-            <p className="text-[12px] text-slate-400">{company} — Preparation Module</p>
+            <h1 className="text-xl font-bold text-slate-800">{moduleTitle}</h1>
+            <p className="text-[12px] text-slate-400">{company} � Preparation Module</p>
           </div>
         </div>
-        <Timer totalSeconds={currentSection.timeMinutes * 60} onExpire={handleTimerExpire} />
+        <Timer totalSeconds={(currentSection?.timeMinutes || 20) * 60} onExpire={handleTimerExpire} />
       </div>
 
       {/* Section Navigation Tabs */}
@@ -322,51 +540,103 @@ function ModuleContent() {
         })}
       </div>
 
-      {/* Timer Expired Overlay */}
+      {/* Timer Expired Banner */}
       {timerExpired && (
         <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-center gap-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <p className="text-[13px] text-amber-800 font-medium">Time's up for this section! You can still review the answers and complete it.</p>
+          <p className="text-[13px] text-amber-800 font-medium">Time's up! You can still review the answers and complete the section.</p>
         </div>
       )}
 
-      {/* Progress indicator */}
+      {/* Progress */}
       <div className="flex items-center justify-between mb-4 px-1">
         <p className="text-[12px] text-slate-400 font-medium">
-          Section {currentSectionIdx + 1} of {sections.length} — <strong className="text-slate-600">{currentSection.title}</strong>
+          Section {currentSectionIdx + 1} of {sections.length} � <strong className="text-slate-600">{currentSection.title}</strong>
         </p>
         <p className="text-[12px] text-slate-400">
           <span className="text-indigo-500 font-bold">{answeredCount}</span> / {totalQuestions} answers revealed
         </p>
       </div>
 
-      {/* Questions */}
-      <div className="space-y-3 mb-8">
+      {/* Concepts chips */}
+      {currentSection.concepts && currentSection.concepts.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-5">
+          {currentSection.concepts.map((c, i) => (
+            <span key={i} className="px-3 py-1 rounded-full text-[11px] font-bold border border-violet-100 bg-violet-50 text-violet-700">
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Q&A Cards */}
+      <div className="space-y-4 mb-6">
         {currentSection.questions.map((item, idx) => {
           const isRevealed = revealedAnswers[idx];
+          const expParagraphs = parseExplanationParagraphs(item.detailedExplanation || item.explanation || "");
+
           return (
-            <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
+            <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
+              {/* Question row */}
               <div className="flex items-start gap-4 px-5 py-4">
-                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-[12px] font-bold shrink-0 mt-0.5">
+                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-[12px] font-bold shrink-0 mt-0.5">
                   {idx + 1}
                 </div>
                 <div className="flex-1">
-                  <p className="text-[14px] font-semibold text-slate-800 leading-snug" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>{item.q}</p>
+                  <p className="text-[14px] font-semibold text-slate-800 leading-snug">{item.q}</p>
                 </div>
                 <button
                   onClick={() => toggleAnswer(idx)}
                   className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
-                    isRevealed ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200"
+                    isRevealed
+                      ? "bg-violet-50 text-violet-600 border-violet-200"
+                      : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-violet-50 hover:text-violet-600 hover:border-violet-200"
                   }`}
                 >
-                  {isRevealed ? "Hide" : "Reveal"}
+                  {isRevealed ? "Hide" : "Reveal Answer"}
                 </button>
               </div>
+
+              {/* Answer + Explanation */}
               {isRevealed && (
-                <div className="px-5 pb-4 pt-0 ml-11">
-                  <div className="bg-gradient-to-r from-indigo-50/80 to-slate-50 rounded-lg px-4 py-3 border border-indigo-100/60">
-                    <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-line">{item.a}</p>
+                <div className="px-5 pb-5 pt-0 ml-11 space-y-3">
+                  {/* Direct answer */}
+                  <div className="bg-gradient-to-r from-indigo-50/80 to-slate-50 rounded-xl px-4 py-3 border border-indigo-100/60">
+                    <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Answer</p>
+                    <p className="text-[13px] text-slate-700 leading-relaxed">{item.a}</p>
                   </div>
+
+                  {/* Detailed explanation paragraphs */}
+                  {expParagraphs.length > 0 && (
+                    <div className="bg-emerald-50/30 rounded-xl px-4 py-4 border border-emerald-100/50 space-y-3">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Detailed Explanation</p>
+                      {expParagraphs.map((para, pIdx) => (
+                        <div key={pIdx} className="flex gap-3">
+                          <div
+                            className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                            style={{ backgroundColor: POINT_COLORS[pIdx % POINT_COLORS.length] }}
+                          />
+                          <div>
+                            {para.heading && (
+                              <p className="text-[12px] font-bold text-slate-700 mb-0.5">{para.heading}</p>
+                            )}
+                            <p className="text-[13px] text-slate-600 leading-relaxed">{para.body}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Transition note (language bridging) */}
+                  {item.transitionNote && (
+                    <div className="bg-amber-50/40 rounded-xl px-4 py-3 border border-amber-100/50">
+                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 019 14"/></svg>
+                        Transition Note
+                      </p>
+                      <p className="text-[13px] text-slate-700 font-medium italic leading-relaxed">{item.transitionNote}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -374,30 +644,43 @@ function ModuleContent() {
         })}
       </div>
 
-      {/* Complete Section Button */}
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-slate-400">
-          {allRevealed ? "✓ All answers revealed" : `Reveal all answers to continue`}
-        </p>
-        <button
-          onClick={handleCompleteSection}
-          disabled={!allRevealed}
-          className={`px-6 py-3 rounded-xl font-bold text-[14px] transition-all ${
-            allRevealed
-              ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
-              : "bg-slate-100 text-slate-300 border border-slate-200 cursor-not-allowed"
-          }`}
-        >
-          {currentSectionIdx < sections.length - 1 ? `Complete & Next Section →` : `Finish Module ✓`}
-        </button>
-      </div>
+      {/* Quiz � shown after all answers revealed */}
+      {allRevealed && !quizDone && currentSection.quiz && currentSection.quiz.length > 0 && (
+        <QuizSection
+          quiz={currentSection.quiz}
+          onComplete={() => {
+            setQuizDone(true);
+            handleCompleteSection();
+          }}
+        />
+      )}
+
+      {/* Complete button � shown when no quiz or quiz done */}
+      {(!allRevealed || (allRevealed && (!currentSection.quiz || currentSection.quiz.length === 0))) && (
+        <div className="flex items-center justify-between mt-6">
+          <p className="text-[11px] text-slate-400">
+            {allRevealed ? "? All answers revealed � complete the section" : `Reveal all ${totalQuestions} answers to unlock the quiz`}
+          </p>
+          <button
+            onClick={handleCompleteSection}
+            disabled={!allRevealed}
+            className={`px-6 py-3 rounded-xl font-bold text-[14px] transition-all ${
+              allRevealed
+                ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+                : "bg-slate-100 text-slate-300 border border-slate-200 cursor-not-allowed"
+            }`}
+          >
+            {currentSectionIdx < sections.length - 1 ? "Complete & Next Section ?" : "Finish Module ?"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function ModulePage() {
   return (
-    <Suspense fallback={<div className="p-8 animate-fade-in text-center text-slate-400">Loading module...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading module...</div>}>
       <ModuleContent />
     </Suspense>
   );

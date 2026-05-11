@@ -186,7 +186,6 @@ def upload_resume(
             days_available = 14
 
             generate_plan_task.delay(
-                "",
                 student_id,
                 target.company_name,
                 days_available,

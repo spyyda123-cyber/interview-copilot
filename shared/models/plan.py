@@ -46,6 +46,10 @@ class LearningTask(Base):
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text)
     duration_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    task_type: Mapped[str] = mapped_column(String(50), default="text") # text, qa, code
+    qa_pairs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    quiz: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    code_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     plan: Mapped["LearningPlan"] = relationship(back_populates="tasks")

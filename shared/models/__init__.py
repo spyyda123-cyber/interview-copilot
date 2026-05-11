@@ -23,6 +23,7 @@ from shared.models.admin_models import (
     TokenTransaction,
     StudentActivityLog,
 )
+from shared.models.llm_usage import LLMUsageLog
 from shared.models.placement import (
     PlacementCompany,
     PlacementApplication,
@@ -59,5 +60,6 @@ __all__ = [
     "TokenRequest",
     "InterviewFeedback",
     "FeedbackAnalysisCache",
+    "LLMUsageLog",
 ]
 

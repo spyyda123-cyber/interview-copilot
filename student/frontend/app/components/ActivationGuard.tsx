@@ -76,7 +76,6 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
-import TopBar from "./TopBar";
 
 const PROTECTED_ROUTES = [
   "/onboarding",
@@ -144,7 +143,6 @@ export default function ActivationGuard({ children }: ActivationGuardProps) {
       <div className="app-shell">
         <Sidebar />
         <div className="main-area">
-          <TopBar />
           <div className="main-content">{children}</div>
         </div>
       </div>

@@ -40,7 +40,7 @@ const getApiBaseUrl = () => {
   return url;
 };
 
-const API_TIMEOUT_MS = 15000;
+const API_TIMEOUT_MS = 60000;
 
 type ApiError = {
   message?: string;
@@ -129,13 +129,55 @@ export type PrepGenerateResponse = {
   status: string;
 };
 
+export type LearningTask = {
+  id?: number;
+  day: number;
+  task_order: number;
+  title: string;
+  description: string;
+  duration_minutes: number;
+  task_type: "text" | "qa" | "code";
+  qa_pairs: {
+    question: string;
+    answer: string;
+    explanation: string;
+    transition_note?: string | null;
+  }[] | null;
+  quiz: {
+    question: string;
+    options: string[];
+    correct_index: number;
+    explanation: string;
+  }[] | null;
+  code_metadata: {
+    initial_code: string;
+    solution?: string;
+    test_cases: any; // Can be array [{input, expected, label}] or legacy string
+    language: string;
+    difficulty?: string;
+    examples?: any[];
+    constraints?: string[];
+    hint?: string;
+  } | null;
+};
+
+export type DailyPlanItem = {
+  day: number;
+  focus: string;
+  tasks: LearningTask[];
+};
+
 export type PlanDetailResponse = {
   plan_id: number;
   student_id: number;
   company_name: string;
   role: string;
   days_available: number;
-  plan_json: Record<string, unknown>;
+  plan_json: {
+    overview: string;
+    daily_plan: DailyPlanItem[];
+    resources: string[];
+  };
 };
 
 export type PlanTaskStatusResponse = {
@@ -150,6 +192,7 @@ export type HealthResponse = {
 export type AuthResponse = {
   student_id: number;
   student_name?: string | null;
+  primary_skill?: string | null;
 };
 
 export type SystemStatusResponse = {
@@ -209,6 +252,7 @@ export type StudentProfileResponse = {
   last_name: string;
   email: string;
   department: string;
+  primary_skill?: string;
   cgpa: number;
   backlogs: number;
   is_verified: boolean;
@@ -512,8 +556,12 @@ export const getPrepStatus = async (
   );
 };
 
+export const getStudentProfile = async (studentId: number) => {
+  return apiFetch<StudentProfileResponse>(`/student/${studentId}/profile`);
+};
+
 export const getHealth = async () => {
-  return apiFetch<HealthResponse>("/health");
+  return apiFetch<any>("/health");
 };
 
 export const getSystemStatus = async () => {
@@ -562,10 +610,6 @@ export const getAllFeedbacks = async (studentId: number) => {
 
 // ── Placement & Profile API Functions ───────────────────────────────
 
-export const getStudentProfile = async (studentId: number) => {
-  return apiFetch<StudentProfileResponse>(`/student/${studentId}/profile`);
-};
-
 export const getPlacements = async (studentId: number) => {
   return apiFetch<PlacementListResponse>(`/placement/companies?student_id=${studentId}`);
 };
@@ -591,5 +635,11 @@ export const activateCompany = async (studentId: number, companyId: string) => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ student_id: studentId, company_id: companyId }),
+  });
+};
+
+export const resetPrepPlan = async (studentId: number, targetId: number) => {
+  return apiFetch<PrepGenerateResponse>(`/prep/reset/${studentId}?target_id=${targetId}`, {
+    method: "DELETE",
   });
 };

@@ -10,7 +10,8 @@ FLOW:
   Admin adds company → Student sees it in placement page
   Student marks "Interested" → Application created with status=INTERESTED
   Admin approves → Application status changes to APPROVED
-  Student activates → Application status=ACTIVATED, study plan generated
+  Student activates → Application status=ACTIVATED, TargetInterview created,
+                      plan generation enqueued immediately (fire-and-forget)
 """
 from __future__ import annotations
 
@@ -258,7 +259,11 @@ def mark_interest(payload: InterestRequest, db: Session = Depends(get_db)):
 
 @router.post("/activate")
 def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
-    """Student activates an APPROVED company - triggers study plan generation."""
+    """Student activates an APPROVED company - triggers study plan generation.
+    
+    Idempotent: calling again on an already-ACTIVATED company re-enqueues plan generation
+    (useful when the student wants to regenerate their plan).
+    """
     student = db.query(Student).filter(Student.id == payload.student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -282,7 +287,9 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
     )
     if not application:
         raise HTTPException(status_code=404, detail="No application found for this company")
-    if application.status != "APPROVED":
+
+    # Allow both APPROVED and already-ACTIVATED (idempotent re-activation)
+    if application.status not in ("APPROVED", "ACTIVATED"):
         raise HTTPException(
             status_code=400,
             detail=f"Company not yet approved. Current status: {application.status}",
@@ -291,7 +298,7 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
     company = db.query(PlacementCompany).filter(PlacementCompany.id == company_uuid).first()
 
     application.status = "ACTIVATED"
-    
+
     # Bridge to Prep/Plan module: Create a TargetInterview if one doesn't exist for this company
     existing_target = (
         db.query(TargetInterview)
@@ -301,7 +308,7 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
         )
         .first()
     )
-    
+
     target_id = None
     if not existing_target and company:
         new_target = TargetInterview(
@@ -312,12 +319,73 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
             analysis_status="processing"
         )
         db.add(new_target)
-        db.flush() # Get target ID
+        db.flush()
         target_id = new_target.id
     elif existing_target:
         target_id = existing_target.id
 
     db.commit()
+
+    # Fire-and-forget: delete old plan and enqueue fresh generation.
+    # Uses a separate try/except so activation always succeeds even if plan ops fail.
+    try:
+        from app.services.plan_service import build_plan_signature
+        from app.models import LearningPlan
+        from app.tasks.jobs import generate_plan_task
+
+        role = company.role or "general"
+        plan_signature = build_plan_signature(student.id, company.company_name, role)
+
+        # Step 1: Delete ALL existing plans for this signature in a clean transaction
+        old_plans = (
+            db.query(LearningPlan)
+            .filter(LearningPlan.plan_signature == plan_signature)
+            .all()
+        )
+        deleted_count = len(old_plans)
+        for old_plan in old_plans:
+            db.delete(old_plan)
+
+        # Flush the deletes first, then commit — avoids UniqueViolation on insert
+        db.flush()
+        db.commit()
+
+        if deleted_count:
+            logger.info(
+                "[PLACEMENT-ACTIVATE] Deleted %d stale plan(s) for student_id=%s company=%s",
+                deleted_count, student.id, company.company_name
+            )
+
+        # Step 2: Insert fresh stub in a new transaction
+        stub_plan = LearningPlan(
+            student_id=student.id,
+            company_name=company.company_name,
+            role=role,
+            days_available=14,
+            plan_signature=plan_signature,
+            status="generating",
+            plan_json={},
+        )
+        db.add(stub_plan)
+        db.commit()
+
+        # Step 3: Enqueue Celery task
+        generate_plan_task.delay(student.id, company.company_name, 14, role)
+        logger.info(
+            "[PLACEMENT-ACTIVATE] Enqueued plan generation for student_id=%s company=%s role=%s",
+            student.id, company.company_name, role
+        )
+
+    except Exception as plan_exc:
+        # Non-fatal: plan generation failure should not block activation response
+        logger.warning(
+            "[PLACEMENT-ACTIVATE] Could not enqueue plan generation: %s", plan_exc
+        )
+        # Rollback any partial plan transaction so the session is clean
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     return {
         "status": "ACTIVATED",
@@ -325,7 +393,7 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
         "target_id": target_id,
         "company_name": company.company_name if company else "",
         "role": company.role if company else "",
-        "message": "Company activated. You can now generate your study plan.",
+        "message": "Company activated. Your study plan is being generated.",
     }
 
 

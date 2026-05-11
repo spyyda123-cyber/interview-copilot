@@ -23,6 +23,7 @@ from pathlib import Path
 import logging
 import json
 import concurrent.futures
+from typing import Optional, Any
 
 import google.generativeai as genai
 
@@ -139,12 +140,23 @@ def _get_generation_model_name() -> str:
     return selected
 
 
-def _generate_content_with_timeout(prompt: str, timeout_seconds: int = 60) -> str:
+def _generate_content_with_timeout(prompt: str, timeout_seconds: int = 60) -> tuple[str, dict]:
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel(_get_generation_model_name())
 
     def _call():
-        return model.generate_content(prompt).text
+        generation_config = genai.types.GenerationConfig(
+            max_output_tokens=16000,
+            temperature=0.4,
+        )
+        response = model.generate_content(prompt, generation_config=generation_config)
+        usage = {
+            "prompt_tokens": response.usage_metadata.prompt_token_count,
+            "completion_tokens": response.usage_metadata.candidates_token_count,
+            "total_tokens": response.usage_metadata.total_token_count,
+            "model": _get_generation_model_name()
+        }
+        return response.text, usage
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_call)
@@ -228,6 +240,15 @@ def build_learning_plan_prompt(context: dict) -> str:
     lang_lines = ["LANGUAGE TRANSITION CONTEXT:"]
     lang_lines.append(f"* Proficient Languages: {', '.join(proficient_langs) or 'Not identified'}")
     lang_lines.append(f"* Required New Languages: {', '.join(target_langs) or 'None'}")
+    
+    # Heuristic: If target_langs is empty but role contains a language, add it
+    if not target_langs:
+        role_lower = role.lower()
+        for lang in _PROG_LANGUAGES:
+            if lang in role_lower and lang not in [p.lower() for p in proficient_langs]:
+                target_langs.append(lang.capitalize())
+                break
+
     if proficient_langs and target_langs:
         transitions = [f"{p} → {t}" for p in proficient_langs for t in target_langs if p.lower() != t.lower()]
         if transitions:
@@ -251,6 +272,9 @@ def build_learning_plan_prompt(context: dict) -> str:
 
 STUDENT PROFILE CONTEXT:
 {profile_context}
+
+MARKSHEETS (Academic Foundation):
+{context.get("marksheet_context", "No marksheets uploaded.")}
 
 {lang_block}
 
@@ -276,44 +300,200 @@ COMPANY INTERVIEW INTELLIGENCE:
 {company_intelligence}
 
 TASK:
-Create a day-by-day interview preparation strategy.
-If a language transition is detected above, embed Python/Java comparison study INLINE within relevant task descriptions (NOT as a separate day or module). See system prompt Section 5 for the exact format.
+Create a complete day-by-day interview preparation plan as JSON.
 
-Rules:
-* Prioritize missing skills and Beginner-proficiency required skills FIRST (disqualifiers)
-* Treat Advanced skills as strengths to polish, not rebuild
-* Include coding tasks only if coding_required is True
-* Include explanation practice ("explain out loud") tasks daily
-* Include behavioral STAR story preparation from resume projects
-* Include at least one mock interview simulation
-* Last day = revision + interview simulation only (NO new topics)
-* Adapt task difficulty to the student's proficiency level for each skill
-* Reference actual resume projects and experiences in task descriptions when possible
-* Do NOT invent skills, projects, or experience not present in the data above
+⚠️ CRITICAL: The plan MUST be built around the TARGET ROLE "{role}" at "{company_name}".
+- Read the JD carefully. The plan topics, frameworks, and languages MUST match what the JD requires.
+- If the JD requires Python → ALL tasks must cover Python, FastAPI/Django, Python async, etc.
+- If the JD requires Java → ALL tasks must cover Java, Spring Boot, JPA, Maven, etc.
+- The student's primary skill ({primary_skill}) determines BRIDGING NOTES only (Day 1-2 only).
+- NEVER generate a Java plan for a Python role, or a Python plan for a Java role.
+- Missing skills from the gap analysis MUST appear in Day 1-2 as the highest priority topics.
+- Support Mode "{support_mode}": Guided = step-by-step explanations; Self-paced = concise tasks; Adaptive = mix based on gaps.
+- Tone "{tone}": Supportive = encouraging language; Direct = no-fluff instructions; Neutral = balanced.
+- Coding Required = {coding_required}: {"Include hands-on coding tasks every day." if coding_required else "Minimize coding tasks — focus on conceptual understanding and verbal explanations."}
+- Difficulty "{difficulty}": {"Hard = include system design, advanced DSA, and deep-dive architecture tasks." if difficulty == "hard" else "Medium = balanced technical + behavioral." if difficulty == "medium" else "Easy = focus on fundamentals and communication."}
+- Round Structure "{round_structure}": Tailor task types to match these exact rounds.
+
+COMPULSORY REQUIREMENTS (strictly enforced — any violation is unacceptable):
+
+1. EVERY TASK (all days, all task types) MUST include qa_pairs AND quiz:
+
+   qa_pairs (3-5 items per task):
+   - "question": A real interview-style question
+   - "answer": A crisp 1-2 sentence answer
+   - "explanation": EXACTLY 4+ separate paragraphs joined by \\n\\n. Format MUST be:
+       "Heading: Topic Name\\n\\nParagraph 1: Core concept in 2-3 sentences.\\n\\nParagraph 2: How it works technically (2-3 sentences).\\n\\nParagraph 3: Real-world use case or code example (2-3 sentences).\\n\\nParagraph 4: Common interview trap or edge case."
+     VIOLATION: Writing a single line or < 4 paragraphs. This is FORBIDDEN.
+   - "transition_note": Compare student's background language to target. Null if same.
+
+   quiz (2-3 MCQ per task — ALWAYS included):
+   - 4 options each, correct_index (0-3), explanation (2 sentences minimum)
+
+2. MODULE MASTERY QUIZ: The VERY LAST task of EVERY day MUST be:
+   - title: "Module Mastery Quiz", task_type: "qa"
+   - 5 qa_pairs covering the day's topics
+   - 3 quiz questions testing the day's learning
+
+3. CODING MOCK TEST MODULE (MANDATORY — SECOND-TO-LAST DAY):
+   Day {days_available - 1} MUST be dedicated to "Coding Mock Tests" with:
+   - First task MUST be task_type="code" with 2-3 real DSA problems relevant to the role
+   - code_metadata MUST include ALL of the following (LeetCode-quality):
+     * language: programming language
+     * initial_code: proper boilerplate with function signature and input parsing
+     * solution: complete working solution with comments
+     * difficulty: "Easy", "Medium", or "Hard"
+     * description: DETAILED problem statement (5-8 sentences) explaining the problem, constraints, and at least 2 approaches (brute force and optimal). Include time/space complexity analysis.
+     * hint: A specific, actionable hint (2-3 sentences) that guides toward the optimal approach without giving away the solution
+     * examples: array of 3 objects with {{input, output, explanation}} — use realistic values
+     * constraints: array of 4-6 constraint strings (e.g., "2 <= nums.length <= 10⁴")
+     * test_cases: array of 5+ objects with {{input, expected, label}} — include edge cases (empty, single element, all negative, duplicates)
+   - This day MUST also end with a "Module Mastery Quiz" covering DSA concepts
+
+4. BEHAVIORAL INTERVIEW MODULE (MANDATORY — LAST DAY):
+   The VERY LAST day (day {days_available}) MUST have focus: "Behavioral Interview" and contain ONLY:
+   - Task 1: "Tell Me About Yourself & Company Research" (task_type="qa") — STAR-structured answers for self-introduction, company research, and motivation questions
+   - Task 2: "Behavioral Scenarios (STAR Method)" (task_type="qa") — challenge, conflict, leadership, teamwork stories using STAR framework
+   - Task 3: "HR Round Questions" (task_type="qa") — salary expectations, career goals, strengths/weaknesses, notice period
+   - Task 4: "Module Mastery Quiz" (task_type="qa") — 5 behavioral qa_pairs + 3 quiz questions
+   - ALL tasks in this day MUST have task_type="qa" (NO code tasks)
+   - transition_note for ALL behavioral tasks MUST be null
+
+5. TRANSITION NOTES: Days 1-2 — every qa_pair transition_note MUST be non-null (if cross-language).
+
+CRITICAL: The "explanation" field MUST have 4+ separate \\n\\n-separated paragraphs. Single-line explanations are UNACCEPTABLE.
 
 Return JSON format:
 {{
-"overview": "strategy summary",
-"daily_plan": [
-{{
-"day": 1,
-"focus": "topic",
-"tasks": [
-{{
-"title": "task name",
-"description": "what to do",
-"duration_minutes": 60
-}}
-]
-}}
-],
-"resources": ["resource 1", "resource 2"]
+  "overview": "strategy summary",
+  "daily_plan": [
+    {{
+      "day": 1,
+      "focus": "Day 1 topic",
+      "tasks": [
+        {{
+          "title": "task name",
+          "description": "what to do",
+          "duration_minutes": 60,
+          "task_type": "qa",
+          "qa_pairs": [
+            {{
+              "question": "Interview question?",
+              "answer": "Direct 1-sentence answer.",
+              "explanation": "Heading: Concept Name\\n\\nCore concept paragraph with 3 sentences.\\n\\nTechnical details paragraph with 3 sentences.\\n\\nReal-world use case with example.\\n\\nInterview trap: common mistake to avoid.",
+              "transition_note": "In Java you use X, but in Python you use Y because Z."
+            }}
+          ],
+          "quiz": [
+            {{
+              "question": "MCQ question?",
+              "options": ["Option A", "Option B", "Option C", "Option D"],
+              "correct_index": 0,
+              "explanation": "A is correct because X. B is wrong because Y."
+            }}
+          ],
+          "code_metadata": null
+        }},
+        {{
+          "title": "Module Mastery Quiz",
+          "description": "Test your understanding of today's topics.",
+          "duration_minutes": 20,
+          "task_type": "qa",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": null
+        }}
+      ]
+    }},
+    {{
+      "day": {days_available - 1},
+      "focus": "Coding Mock Tests",
+      "tasks": [
+        {{
+          "title": "DSA: Arrays & Strings",
+          "description": "Solve 2-3 progressively harder DSA problems.",
+          "duration_minutes": 90,
+          "task_type": "code",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": {{
+            "language": "Python",
+            "initial_code": "# Write your solution here\\ndef solution(nums):\\n    pass",
+            "solution": "# Optimal solution here",
+            "difficulty": "Medium",
+            "examples": [{{"input": "nums = [2,7,11,15], target = 9", "output": "[0,1]", "explanation": "nums[0] + nums[1] = 9"}}],
+            "constraints": ["2 <= nums.length <= 10^4"],
+            "test_cases": [{{"input": "[2,7,11,15]\\n9", "expected": "[0, 1]", "label": "Basic case"}}]
+          }}
+        }},
+        {{
+          "title": "Module Mastery Quiz",
+          "description": "Test your DSA knowledge.",
+          "duration_minutes": 20,
+          "task_type": "qa",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": null
+        }}
+      ]
+    }},
+    {{
+      "day": {days_available},
+      "focus": "Behavioral Interview",
+      "tasks": [
+        {{
+          "title": "Tell Me About Yourself & Company Research",
+          "description": "Practice your self-introduction and company-specific answers.",
+          "duration_minutes": 45,
+          "task_type": "qa",
+          "qa_pairs": [
+            {{
+              "question": "Tell me about yourself.",
+              "answer": "Structure: Present, Past, Future. 60-90 seconds, professional focus.",
+              "explanation": "Your Professional Elevator Pitch\\n\\nThis is almost always the opening question. The best structure is Present → Past → Future: start with who you are now, briefly mention relevant background, and end with what you're looking for.\\n\\nKeep it to 60-90 seconds. Every sentence should be intentional — avoid personal details unless they directly relate to the role. Focus on your technical identity.\\n\\nTailor your answer to the company and role. Research the company's tech stack and mirror it in your narrative.\\n\\nEnd with a bridge to the role: 'I'm excited about this position because it aligns with my expertise and career goals.'",
+              "transition_note": null
+            }}
+          ],
+          "quiz": [],
+          "code_metadata": null
+        }},
+        {{
+          "title": "Behavioral Scenarios (STAR Method)",
+          "description": "Practice challenge, conflict, and leadership stories using STAR framework.",
+          "duration_minutes": 45,
+          "task_type": "qa",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": null
+        }},
+        {{
+          "title": "HR Round Questions",
+          "description": "Prepare for salary, career goals, strengths/weaknesses, and situational HR questions.",
+          "duration_minutes": 30,
+          "task_type": "qa",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": null
+        }},
+        {{
+          "title": "Module Mastery Quiz",
+          "description": "Test your behavioral interview readiness.",
+          "duration_minutes": 20,
+          "task_type": "qa",
+          "qa_pairs": [],
+          "quiz": [],
+          "code_metadata": null
+        }}
+      ]
+    }}
+  ],
+  "resources": ["resource 1"]
 }}"""
 
     return f"{system_prompt}\n\n{user_prompt}"
 
 
-def generate_learning_plan(prompt_or_context) -> str:
+def generate_learning_plan(prompt_or_context: str | dict) -> tuple[str, Optional[dict]]:
     """
     Generate a learning plan via the configured LLM provider.
 
@@ -341,26 +521,27 @@ def generate_learning_plan(prompt_or_context) -> str:
         else:
             context = prompt_or_context
 
-        logger.info("[LLM-ROUTER] Using OpenAI (GPT-5) for plan generation")
+        logger.info("[LLM-ROUTER] Using OpenAI (GPT-4o) for plan generation")
         try:
-            plan_dict = _generate_plan_via_openai(context)
-            # Return JSON string for backward compat with _parse_plan_json() callers
-            return json.dumps(plan_dict)
+            plan_dict, usage = _generate_plan_via_openai(context)
+            # Return JSON string and usage for backward compat with _parse_plan_json() callers
+            return json.dumps(plan_dict), usage
         except Exception as exc:
             logger.warning(
-                "[LLM-ROUTER] GPT-5 failed (%s), falling back to Gemini. Error: %s",
+                "[LLM-ROUTER] GPT-4o failed (%s), falling back to Gemini. Error: %s",
                 type(exc).__name__, exc,
             )
             # Fall through to Gemini below
 
     # Gemini path (primary when LLM_PROVIDER=gemini, or as fallback)
-    logger.info("[LLM-ROUTER] Using Gemini for plan generation")
+    # Resolve prompt_or_context to a string for Gemini
     if isinstance(prompt_or_context, dict):
-        prompt = build_learning_plan_prompt(prompt_or_context)
+        gemini_prompt = build_learning_plan_prompt(prompt_or_context)
     else:
-        prompt = prompt_or_context
-
-    return _generate_content_with_timeout(prompt, timeout_seconds=60)
+        gemini_prompt = prompt_or_context
+    logger.info("[LLM-ROUTER] Using Gemini for plan generation")
+    res, usage = _generate_content_with_timeout(gemini_prompt, timeout_seconds=180)
+    return res, usage
 
 
 def analyze_target_jd(
@@ -368,7 +549,7 @@ def analyze_target_jd(
     role: str,
     jd_text: str,
     company_context: str,
-) -> dict:
+) -> tuple[dict, Optional[dict]]:
     """
     Analyse a JD using the configured LLM provider.
 
@@ -425,11 +606,17 @@ Return strict JSON only with this exact shape:
         response = model.generate_content(prompt)
 
     raw = response.text
+    usage = {
+        "prompt_tokens": response.usage_metadata.prompt_token_count,
+        "completion_tokens": response.usage_metadata.candidates_token_count,
+        "total_tokens": response.usage_metadata.total_token_count,
+        "model": _get_generation_model_name()
+    }
     try:
-        return json.loads(raw)
+        return json.loads(raw), usage
     except json.JSONDecodeError:
         start = raw.find("{")
         end   = raw.rfind("}")
         if start != -1 and end != -1 and end > start:
-            return json.loads(raw[start: end + 1])
+            return json.loads(raw[start: end + 1]), usage
         raise

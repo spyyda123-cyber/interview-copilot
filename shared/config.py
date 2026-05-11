@@ -14,12 +14,12 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
-    OPENAI_GENERATION_MODEL: str = "gpt-5"
-    OPENAI_FALLBACK_MODEL: str = "gpt-5-mini"
+    OPENAI_GENERATION_MODEL: str = "gpt-4o"
+    OPENAI_FALLBACK_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str = ""
     GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
     GEMINI_GENERATION_MODEL: str = "gemini-1.5-flash-latest"
-    # LLM provider: "openai" uses GPT-5 API, "gemini" uses Gemini API
+    # LLM provider: "openai" uses GPT-4 API, "gemini" uses Gemini API
     LLM_PROVIDER: str = "openai"
 
     UPLOAD_DIR: str = "storage/resumes"
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 8
     model_config = {
-        "env_file": str(Path(__file__).resolve().parents[1] / ".env"),
+        "env_file": (".env", str(Path(__file__).resolve().parents[1] / ".env")),
         "case_sensitive": True
     }
 

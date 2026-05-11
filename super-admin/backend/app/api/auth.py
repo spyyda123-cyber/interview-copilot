@@ -33,13 +33,20 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 def super_admin_login(payload: SuperAdminLoginRequest, db: Session = Depends(get_db)):
+    import logging
+    logger = logging.getLogger("super_admin.login")
+    logger.info(f"Attempting login for {payload.email}")
     user = (
         db.query(User)
         .filter(User.email == payload.email, User.role == UserRole.SUPER_ADMIN)
         .first()
     )
-    if user is None or not verify_password(payload.password, user.password_hash):
-        # TODO: Trigger failed-login security alert email/notification for super admin accounts.
+    if user is None:
+        logger.warning(f"User not found for email: {payload.email}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    
+    if not verify_password(payload.password, user.password_hash):
+        logger.warning(f"Password verification failed for: {payload.email}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     if user.status != UserStatus.ACTIVE:

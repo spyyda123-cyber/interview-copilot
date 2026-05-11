@@ -110,7 +110,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-10 w-full">
+      <div className="grid grid-cols-3 gap-4 mb-10 w-full">
         <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
           <p className="text-[10px] font-bold tracking-widest text-gray-600 uppercase mb-2">Colleges</p>
           <p className="text-[28px] font-medium text-gray-900">
@@ -129,10 +129,25 @@ export default function DashboardPage() {
             {loading ? "..." : formatNumber(summary?.total_tokens_consumed ?? 0)}
           </p>
         </div>
+        
         <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
           <p className="text-[10px] font-bold tracking-widest text-gray-600 uppercase mb-2">Pending Requests</p>
           <p className="text-[28px] font-medium text-gray-900">
             {reqLoading ? "..." : pendingRequests.length}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-blue-100 p-4 bg-blue-50/30 shadow-sm">
+          <p className="text-[10px] font-bold tracking-widest text-blue-600 uppercase mb-2">LLM Tokens Used</p>
+          <p className="text-[28px] font-medium text-blue-900">
+            {loading ? "..." : formatNumber(summary?.total_llm_tokens ?? 0)}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-emerald-100 p-4 bg-emerald-50/30 shadow-sm">
+          <p className="text-[10px] font-bold tracking-widest text-emerald-600 uppercase mb-2">Total AI Spend</p>
+          <p className="text-[28px] font-medium text-emerald-900">
+            {loading ? "..." : `$${(summary?.total_llm_cost_usd ?? 0).toFixed(2)}`}
           </p>
         </div>
       </div>

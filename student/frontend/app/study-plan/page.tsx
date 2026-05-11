@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 const MonacoEditor = dynamic(() => import("@monaco-editor/react").then(m => m.default), { ssr: false, loading: () => <div style={{height:'100%',background:'#1e1e2e',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'#6b7280',fontSize:12}}>Loading editor…</span></div> });
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  *  EDITORIAL STYLES
@@ -103,33 +104,254 @@ import {
   updateBookmark,
   type ScormSectionItem,
 } from "@/src/lib/scorm";
-import { generateCodeReport, getLatestPrep, getPrepStatus, type PlanDetailResponse } from "@/src/lib/api";
+import { generateCodeReport, generatePrep, getLatestPrep, getPrepStatus, getStudentProfile, resetPrepPlan, type PlanDetailResponse, type LearningTask } from "@/src/lib/api";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  *  AI ROADMAP VIEW
  * ───────────────────────────────────────────────────────────────────────────── */
-function AIRoadmapView({ plan }: { plan: PlanDetailResponse }) {
-  const data = plan.plan_json as any;
-  const dailyPlan = data.daily_plan || [];
+/* ─────────────────────────────────────────────────────────────────────────────
+ *  INTERACTIVE TASK PLAYGROUND
+ * ───────────────────────────────────────────────────────────────────────────── */
+function InteractiveTaskPlayground({ task, onClose }: { task: LearningTask; onClose: () => void }) {
+  const [code, setCode] = useState(task.code_metadata?.initial_code || "");
+  const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
+  const [isRunning, setIsRunning] = useState(false);
+  const [output, setOutput] = useState<string | null>(null);
+
+  const handleRunCode = () => {
+    setIsRunning(true);
+    setTimeout(() => {
+      setIsRunning(false);
+      setOutput("All test cases passed! (Simulated)");
+    }, 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 md:p-8 animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-6xl h-full max-h-[850px] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${task.task_type === 'code' ? 'bg-indigo-600 text-white' : 'bg-violet-600 text-white'}`}>
+              {task.task_type === 'code' ? <IconCode size={24} /> : <IconBook size={24} />}
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">{task.title}</h3>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.task_type === 'code' ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'}`}>
+                  {task.task_type === 'code' ? 'Coding Sandbox' : 'Interactive Quiz'}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">• {task.duration_minutes} min session</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600">
+            <IconX size={24} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Panel: Description & Q&A */}
+          <div className={`flex-1 overflow-y-auto p-8 ${task.task_type === 'code' ? 'border-r bg-slate-50/30' : ''}`}>
+            <div className="max-w-3xl mx-auto">
+              <div className="mb-10">
+                <h4 className="text-slate-800 font-bold mb-3 flex items-center gap-2">
+                  <IconLightbulb size={18} className="text-amber-500" />
+                  Task Instructions
+                </h4>
+                <p className="text-[15px] text-slate-600 leading-relaxed bg-white border border-slate-100 p-5 rounded-2xl shadow-sm italic">
+                  {task.description}
+                </p>
+              </div>
+
+              {task.task_type === 'qa' && task.qa_pairs && (
+                <div className="space-y-4">
+                  <h4 className="text-slate-800 font-bold mb-4 flex items-center gap-2">
+                    <IconBook size={18} className="text-violet-500" />
+                    Deep Dive Questions
+                  </h4>
+                  {task.qa_pairs.map((qa, idx) => (
+                    <div key={idx} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all">
+                      <div className="flex items-start gap-4">
+                        <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-violet-50 text-violet-600 text-[13px] font-bold shrink-0 mt-0.5">{idx + 1}</span>
+                        <div className="flex-1">
+                          <p className="text-[15px] font-bold text-slate-800 mb-4">{qa.question}</p>
+                          {revealedAnswers[idx] ? (
+                            <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
+                              <div className="bg-indigo-50/50 rounded-2xl p-5 border border-indigo-100/50">
+                                <p className="text-[14px] text-slate-700 leading-relaxed">{qa.answer}</p>
+                              </div>
+                              {qa.explanation && (
+                                <div className="bg-emerald-50/30 rounded-xl p-4 border border-emerald-100/50">
+                                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-1">Detailed Explanation</p>
+                                  <p className="text-[13px] text-slate-600 leading-relaxed">{qa.explanation}</p>
+                                </div>
+                              )}
+                              {qa.transition_note && (
+                                <div className="bg-amber-50/40 rounded-xl p-4 border border-amber-100/50">
+                                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                    <IconLightbulb size={12} /> Transition Note
+                                  </p>
+                                  <p className="text-[13px] text-slate-700 font-medium italic leading-relaxed">{qa.transition_note}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setRevealedAnswers(prev => ({...prev, [idx]: true}))}
+                              className="px-5 py-2 rounded-xl bg-violet-600 text-white text-[12px] font-bold hover:bg-violet-700 transition-colors shadow-md shadow-violet-200"
+                            >
+                              Reveal Detailed Answer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {task.task_type === 'code' && (
+                <div className="mt-8">
+                  <h4 className="text-slate-800 font-bold mb-4 flex items-center gap-2 text-[14px]">
+                    <IconTerminal size={18} className="text-slate-400" />
+                    Validation Requirements
+                  </h4>
+                  <div className="bg-slate-900 rounded-2xl p-6 shadow-inner">
+                     <pre className="text-[13px] font-mono text-emerald-400/90 whitespace-pre-wrap leading-relaxed">
+                      {task.code_metadata?.test_cases}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Panel: Editor (only for code) */}
+          {task.task_type === 'code' && (
+            <div className="flex-1 flex flex-col bg-[#1e1e2e]">
+              <div className="px-6 py-4 bg-[#1b1b29] border-b border-[#2d2d3d] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                    {task.code_metadata?.language || 'java'} environment
+                  </span>
+                </div>
+                <button 
+                  onClick={handleRunCode}
+                  disabled={isRunning}
+                  className="flex items-center gap-2 px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-900/20"
+                >
+                  {isRunning ? 'Running Tests...' : <><IconPlay size={14} /> Run Tests</>}
+                </button>
+              </div>
+              <div className="flex-1">
+                <MonacoEditor
+                  height="100%"
+                  language={task.code_metadata?.language?.toLowerCase() || "java"}
+                  theme="vs-dark"
+                  value={code}
+                  onChange={(val) => setCode(val || "")}
+                  options={{
+                    fontSize: 15,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    padding: { top: 24 },
+                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                    cursorSmoothCaretAnimation: "on",
+                    smoothScrolling: true,
+                    lineNumbersMinChars: 3,
+                  }}
+                />
+              </div>
+              {output && (
+                <div className="h-48 bg-[#161621] border-t border-[#2d2d3d] p-6 font-mono text-[13px] overflow-y-auto slide-in-from-bottom-full transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-slate-500 uppercase text-[10px] font-bold tracking-widest">Test Execution Output</span>
+                    <button onClick={() => setOutput(null)} className="text-slate-400 hover:text-white transition-colors">Clear</button>
+                  </div>
+                  <div className="text-emerald-400 bg-emerald-900/10 p-4 rounded-xl border border-emerald-900/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <IconCheck size={16} />
+                      <span className="font-bold">Build Successful</span>
+                    </div>
+                    {output}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Footer */}
+        <div className="px-10 py-5 border-t bg-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-4 text-[12px] text-slate-400 font-medium">
+             <div className="flex -space-x-2">
+                {[1,2,3].map(i => <div key={i} className="w-6 h-6 rounded-full border-2 border-white bg-slate-200" />)}
+             </div>
+             <span>You and 12 others are practicing this module</span>
+          </div>
+          <button 
+            onClick={onClose}
+            className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-[14px] font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 active:scale-95"
+          >
+            Finish & Save Progress
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ *  AI ROADMAP VIEW
+ * ───────────────────────────────────────────────────────────────────────────── */
+function AIRoadmapView({ plan, onSelectModule, onRegenerate }: { plan: PlanDetailResponse; onSelectModule: (idx: number) => void; onRegenerate?: () => void }) {
+  const router = useRouter();
+  const [activeTask, setActiveTask] = useState<LearningTask | null>(null);
+  const data = plan.plan_json;
+  const dailyPlan = Array.isArray(data?.daily_plan) ? data.daily_plan : [];
 
   return (
     <div className="h-full flex flex-col bg-white rounded-2xl border overflow-hidden" style={{ borderColor: C.border }}>
       {/* Header */}
       <div className="px-6 py-5 border-b bg-gradient-to-r from-violet-50 to-indigo-50" style={{ borderColor: C.border }}>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-600 text-white shadow-sm">
-            <IconBook size={18} />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-600 text-white shadow-lg">
+              <IconBook size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold" style={{ color: C.heading }}>Strategic AI Roadmap</h2>
+              <p className="text-[11px] text-violet-600 font-bold uppercase tracking-wider">Powered by GPT-4o & Gemini</p>
+            </div>
           </div>
-          <h2 className="text-lg font-bold" style={{ color: C.heading }}>Strategic AI Roadmap</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-violet-100 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] font-bold text-slate-600">Plan is Active</span>
+            </div>
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                title="Regenerate plan based on your JD"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-orange-200 shadow-sm hover:bg-orange-50 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                <span className="text-[11px] font-bold text-orange-600">Regenerate</span>
+              </button>
+            )}
+          </div>
         </div>
-        <p className="text-[13px] leading-relaxed max-w-3xl" style={{ color: C.body }}>
+        <p className="text-[13px] leading-relaxed max-w-3xl mt-4" style={{ color: C.body }}>
           {data.overview || `Personalized ${plan.days_available}-day preparation strategy for your ${plan.role} interview at ${plan.company_name}.`}
         </p>
       </div>
 
       {/* Timeline Content */}
       <div className="flex-1 overflow-y-auto editorial-scrollbar p-6 space-y-8 bg-[#FDFDFF]">
-        {dailyPlan.map((day: any, dIdx: number) => (
+        {dailyPlan.map((day, dIdx) => (
           <div key={dIdx} className="relative pl-10">
             {/* Timeline Line */}
             {dIdx < dailyPlan.length - 1 && (
@@ -143,32 +365,56 @@ function AIRoadmapView({ plan }: { plan: PlanDetailResponse }) {
             </div>
 
             <div className="mb-2">
-              <h3 className="text-[14px] font-bold uppercase tracking-wider mb-3" style={{ color: C.purple }}>
+              <h3 className="text-[14px] font-bold uppercase tracking-wider mb-3 flex items-center gap-2 cursor-pointer hover:text-violet-600 transition-colors group" 
+                  style={{ color: C.purple }}
+                  onClick={() => onSelectModule(day.day)}>
                 Day {day.day}: {day.focus}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] font-bold bg-violet-600 text-white px-2 py-0.5 rounded-full shadow-sm ml-2">
+                  Enter Module <IconArrowRight size={10} />
+                </div>
+                <span className="h-px flex-1 bg-violet-50" />
               </h3>
               
               <div className="grid gap-3">
-                {day.tasks.map((task: any, tIdx: number) => (
-                  <div key={tIdx} className="group relative p-4 rounded-xl border bg-white hover:shadow-md transition-all hover:border-violet-200" 
+                {day.tasks.map((task, tIdx) => (
+                  <div key={tIdx} 
+                       onClick={() => {
+                         if (task.task_type === 'qa' || task.task_type === 'code') {
+                           setActiveTask(task);
+                         }
+                       }}
+                       className={`group relative p-5 rounded-2xl border bg-white hover:shadow-xl transition-all duration-300 hover:border-violet-300 ${ (task.task_type === 'qa' || task.task_type === 'code') ? 'cursor-pointer' : ''}`} 
                        style={{ borderColor: C.border }}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-[13px] font-bold group-hover:text-violet-600 transition-colors" style={{ color: C.heading }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[14px] font-bold group-hover:text-violet-600 transition-colors" style={{ color: C.heading }}>
                             {task.title}
                           </span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 font-medium" style={{ color: C.muted }}>
+                          {(task.task_type === 'qa' || task.task_type === 'code') && (
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${task.task_type === 'code' ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'}`}>
+                              {task.task_type === 'code' ? 'Interactive Code' : 'Interactive Quiz'}
+                            </span>
+                          )}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-50 font-medium border border-slate-100" style={{ color: C.muted }}>
                             {task.duration_minutes} min
                           </span>
                         </div>
-                        <p className="text-[12px] leading-relaxed" style={{ color: C.secondary }}>
+                        <p className="text-[12px] leading-relaxed line-clamp-2" style={{ color: C.secondary }}>
                           {task.description}
                         </p>
                       </div>
-                      <div className="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors group-hover:border-violet-400" 
-                           style={{ borderColor: C.border }}>
-                        <div className="w-2 h-2 rounded-sm bg-violet-600 opacity-0 transition-opacity group-hover:opacity-20" />
-                      </div>
+                      
+                      { (task.task_type === 'qa' || task.task_type === 'code') ? (
+                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-50 group-hover:bg-violet-600 group-hover:text-white transition-all text-violet-600 shadow-inner">
+                          {task.task_type === 'code' ? <IconCode size={18} /> : <IconPlay size={18} />}
+                        </div>
+                      ) : (
+                         <div className="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors group-hover:border-violet-400" 
+                              style={{ borderColor: C.border }}>
+                           <div className="w-2 h-2 rounded-sm bg-violet-600 opacity-0 transition-opacity group-hover:opacity-20" />
+                         </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -179,13 +425,13 @@ function AIRoadmapView({ plan }: { plan: PlanDetailResponse }) {
 
         {/* Resources Card */}
         {data.resources && data.resources.length > 0 && (
-          <div className="mt-8 p-5 rounded-2xl border bg-gray-50/50" style={{ borderColor: C.border }}>
-            <h4 className="text-[13px] font-bold mb-3 flex items-center gap-2" style={{ color: C.heading }}>
-              <IconBook size={14} /> Recommended Resources
+          <div className="mt-8 p-6 rounded-2xl border border-dashed bg-slate-50/50" style={{ borderColor: C.border }}>
+            <h4 className="text-[13px] font-bold mb-4 flex items-center gap-2" style={{ color: C.heading }}>
+              <IconBook size={14} className="text-violet-500" /> Curated Reading List
             </h4>
             <div className="flex flex-wrap gap-2">
-              {data.resources.map((res: string, i: number) => (
-                <span key={i} className="px-3 py-1.5 rounded-lg bg-white border text-[11px] font-medium shadow-sm" style={{ borderColor: C.border, color: C.body }}>
+              {data.resources.map((res, i) => (
+                <span key={i} className="px-4 py-2 rounded-xl bg-white border text-[11px] font-bold shadow-sm hover:border-violet-200 transition-colors cursor-default" style={{ borderColor: C.border, color: C.body }}>
                   {res}
                 </span>
               ))}
@@ -193,6 +439,14 @@ function AIRoadmapView({ plan }: { plan: PlanDetailResponse }) {
           </div>
         )}
       </div>
+
+      {/* Task Playground Modal */}
+      {activeTask && (
+        <InteractiveTaskPlayground 
+          task={activeTask} 
+          onClose={() => setActiveTask(null)} 
+        />
+      )}
     </div>
   );
 }
@@ -212,7 +466,10 @@ interface Question {
   a: string;
   explanation: string;
   detailedExplanation?: string;
-  pythonBridgingNote?: string;  // shown only when primarySkill !== target language
+  pythonBridgingNote?: string; // shown when target is Java, student is Python/other
+  javaBridgingNote?: string;   // shown when target is Python, student is Java/other
+  jsBridgingNote?: string;     // shown when target is Java, student is Frontend/JS
+  isTransitionOnly?: boolean;  // hide if student is already proficient in target lang
   coverImageUrl?: string | null;
   explanationPoints?: ExplanationPoint[];
 }
@@ -255,29 +512,22 @@ const PLAN_MODULES: Record<string, { title: string; sub: string; progress: numbe
     { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 15, color: "#f59e0b" },
     { title: "SQL + database design", sub: "Joins, Indexing", progress: 0, color: "#e2e8f0" },
     { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-    { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
   ],
   "Google": [
     { title: "Algorithms & Data Structures", sub: "Arrays, Trees, Graphs, DP", progress: 30, color: "#22c55e" },
     { title: "System Design", sub: "Scalability, CAP, Databases", progress: 10, color: "#3b82f6" },
     { title: "Java / Python fundamentals", sub: "OOP, Collections, Streams", progress: 60, color: "#f59e0b" },
-    { title: "Behavioral preparation", sub: "STAR method, Leadership", progress: 5, color: "#e2e8f0" },
-    { title: "Mock interviews", sub: "Technical, HR, Case", progress: 0, color: "#e2e8f0" },
+    { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+    { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
   ],
   "Infosys": [
     { title: "Core Java", sub: "OOP, Collections, Threads", progress: 50, color: "#22c55e" },
     { title: "SQL basics", sub: "Queries, Joins, Aggregation", progress: 20, color: "#3b82f6" },
     { title: "Aptitude & Reasoning", sub: "Quant, Verbal, Logical", progress: 80, color: "#f59e0b" },
     { title: "Communication skills", sub: "English, Group Discussion", progress: 0, color: "#e2e8f0" },
-    { title: "HR round prep", sub: "FAQs, Situational", progress: 0, color: "#e2e8f0" },
-  ],
-  "Tech Startup": [
-    { title: "Java Foundations", sub: "Types, OOP, Syntax — with Python comparisons", progress: 0, color: "#22c55e" },
-    { title: "Core Java fundamentals", sub: "OOP, Collections, Streams", progress: 0, color: "#3b82f6" },
-    { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#f59e0b" },
-    { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
     { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-    { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+    { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
   ],
 };
 
@@ -609,25 +859,162 @@ const MODULE_SECTIONS: Record<string, Section[]> = {
   ],
 };
 
+// ─── Behavioral Interview (standalone module — last module for all companies) ──
+MODULE_SECTIONS["Behavioral Interview"] = [
+  {
+    title: "Tell Me About Yourself & Company Research",
+    timeMinutes: 20,
+    coverImage: "/study-images/interview_prep.svg",
+    concepts: ["Self Introduction", "STAR Method", "Company Research", "Motivation Questions"],
+    questions: [
+      {
+        q: "Tell me about yourself.",
+        a: "Structure: Present, Past, Future. 60-90 seconds, professional focus.",
+        explanation: "Start with current role/studies, mention relevant experience, highlight key skills, connect to the target position.",
+        detailedExplanation: "Your Professional Elevator Pitch\n\nThis is almost always the opening question. The best structure is Present → Past → Future: start with who you are now (current role, education), briefly mention relevant background (projects, internships, key achievements), and end with what you're looking for (how this role fits your goals).\n\nKeep it to 60-90 seconds. Every sentence should be intentional — avoid personal details unless they directly relate to the role. Focus on your technical identity: \"I'm a final-year CS student specializing in backend development. I've built two production APIs using Spring Boot and deployed them on AWS.\"\n\nTailor your answer to the company and role. For a backend position, emphasize your Java, databases, and system design experience. Research the company's tech stack and mirror it in your narrative.\n\nEnd with a bridge to the role: \"...and that's why I'm excited about this position — it aligns perfectly with my Spring Boot expertise and interest in enterprise-scale systems.\""
+      },
+      {
+        q: "Why do you want to work at this company?",
+        a: "Research the company. Connect your skills to their mission. Show genuine enthusiasm.",
+        explanation: "Mention specific products, culture, or news. Align your goals with their direction.",
+        detailedExplanation: "Demonstrating Genuine Interest\n\nGeneric answers like 'it's a great company' instantly signal you haven't researched the organisation. The best answers connect three things: the company's work, your skills, and your career goals.\n\nResearch deeply before the interview: visit their engineering blog, read recent press releases, check their GitHub, note their tech stack from job descriptions, understand their products and services.\n\nStructure in three parts: (1) What specifically attracts you — mention a product, a technology decision, their culture, or a recent achievement. (2) How your skills align — connect your expertise to their technical challenges. (3) What you hope to grow into — show long-term commitment.\n\nAvoid mentioning salary, brand name, or convenience as primary motivators. The most convincing answers reference specific things: 'I read about your migration from monoliths to microservices on your engineering blog, and that architecture challenge is exactly what excites me.'"
+      },
+      {
+        q: "What are your greatest strengths?",
+        a: "Pick 2-3 strengths directly relevant to the role. Back each with a specific example.",
+        explanation: "Avoid generic answers like 'hardworking'. Use specific, role-relevant strengths with evidence.",
+        detailedExplanation: "Strengths That Land\n\nThe best strength answers are specific, relevant, and backed by evidence. Generic answers like 'I'm a hard worker' or 'I'm a team player' are forgettable. Instead, pick strengths that directly map to the job requirements.\n\nFor a backend developer role, strong answers include: 'I have a strong ability to debug complex distributed systems — I once traced a latency issue across 4 microservices to a single misconfigured connection pool.' Or: 'I'm good at translating ambiguous requirements into clean API contracts, which I demonstrated when I led the API design for our college project.'\n\nStructure each strength as: Strength → Evidence → Impact. 'My strength is [X]. For example, [specific situation]. This resulted in [measurable outcome].'\n\nPick strengths that are genuine — interviewers can tell when you're reciting a list. Choose 2-3 that you can speak about naturally and with enthusiasm."
+      },
+      {
+        q: "What is your greatest weakness?",
+        a: "Choose a real but non-critical weakness. Show self-awareness and active improvement.",
+        explanation: "Avoid fake weaknesses like 'I work too hard'. Show genuine self-awareness and a growth plan.",
+        detailedExplanation: "Authentic Weakness Answers\n\nThis question tests self-awareness and growth mindset. Interviewers see through fake weaknesses like 'I'm a perfectionist' or 'I work too hard' — these signal low self-awareness.\n\nChoose a real weakness that is: (1) not a core requirement for the role, (2) something you're actively working to improve, and (3) something you can speak about with specific examples.\n\nGood examples for a developer: 'I used to struggle with estimating task complexity, which led to missed deadlines. I've since started breaking tasks into smaller units and adding 20% buffer time — my estimates are now within 10% of actual time.' Or: 'I sometimes over-engineer solutions. I've been practicing the YAGNI principle and getting early feedback before building complex abstractions.'\n\nThe formula: Weakness → Specific example of it causing a problem → What you've done to improve → Evidence of improvement. This shows maturity and a growth mindset."
+      },
+    ],
+    quiz: [
+      { question: "The best structure for 'Tell me about yourself' is:", options: ["Past, Present, Future", "Present, Past, Future", "Future, Present, Past", "Skills, Education, Hobbies"], correctIndex: 1, explanation: "Present → Past → Future: start with who you are now, mention relevant background, end with what you're looking for in this role." },
+      { question: "When answering 'Why this company?', you should:", options: ["Mention salary first", "Reference specific company details you researched", "Say it's a great brand", "Focus only on career growth"], correctIndex: 1, explanation: "Specific research signals genuine interest. Reference their products, tech stack, culture, or recent news to stand out." },
+      { question: "A good weakness answer should:", options: ["Be a fake strength in disguise", "Show self-awareness and active improvement", "Avoid all real weaknesses", "Be unrelated to the job"], correctIndex: 1, explanation: "Authentic weakness answers show self-awareness and growth mindset — both highly valued by interviewers." },
+    ],
+  },
+  {
+    title: "Behavioral Scenarios (STAR Method)",
+    timeMinutes: 25,
+    coverImage: "/study-images/interview_prep.svg",
+    concepts: ["STAR Framework", "Challenge Stories", "Leadership Examples", "Conflict Resolution"],
+    questions: [
+      {
+        q: "Tell me about a challenge you overcame.",
+        a: "Use STAR: Situation, Task, Action, Result. Quantify the outcome.",
+        explanation: "Situation: set the context. Task: your responsibility. Action: specific steps YOU took. Result: quantifiable outcome.",
+        detailedExplanation: "Structured Storytelling with STAR\n\nSituation: Set the scene in 2-3 sentences. When was this? Where were you working/studying? What was the context? Example: 'During my third-year capstone project, our team was building a real-time chat application for our college's placement portal.'\n\nTask: What was YOUR specific responsibility? Be clear about what was expected of you personally — not just the team's goal. Example: 'I was responsible for the backend architecture and database design, with a 6-week deadline.'\n\nAction: Describe the specific steps YOU took — not what the team did. Use 'I' not 'we.' Example: 'I identified a performance bottleneck in our WebSocket implementation, profiled the database queries, redesigned the message schema with proper indexing, and implemented connection pooling.'\n\nResult: Quantify the outcome. Numbers make your story credible: 'Response time dropped from 2.3s to 180ms. The application successfully handled 500 concurrent users. Our project received the highest grade in the batch.'"
+      },
+      {
+        q: "Describe a time you showed leadership.",
+        a: "Leadership doesn't require a title. Show initiative, influence, and ownership.",
+        explanation: "Examples: leading a project, mentoring a peer, driving a technical decision, resolving a team conflict.",
+        detailedExplanation: "Leadership Without a Title\n\nLeadership in interviews means taking ownership and driving outcomes — not just managing people. Strong examples include: leading a technical decision, mentoring a junior, driving a project when no one else stepped up, or resolving a team conflict.\n\nUse STAR: Situation (team was stuck/leaderless), Task (you identified the gap), Action (specific steps you took to lead), Result (what improved because of your leadership).\n\nExample: 'During our hackathon, our team couldn't agree on the tech stack. I researched the options, created a comparison matrix, presented trade-offs, and facilitated a decision. We chose React + Node.js and delivered a working prototype in 24 hours, winning second place.'\n\nAvoid vague answers like 'I always take initiative.' Interviewers want a specific story with a clear before/after. The best leadership stories show you influenced others without authority."
+      },
+      {
+        q: "Tell me about a time you disagreed with a team member.",
+        a: "Show respectful disagreement, data-driven reasoning, and collaborative resolution.",
+        explanation: "Focus on the process: how you raised the concern, listened to their view, and reached a decision together.",
+        detailedExplanation: "Constructive Conflict Resolution\n\nThis question tests emotional intelligence and collaboration skills. Interviewers want to see that you can disagree professionally without damaging relationships.\n\nThe key elements: (1) You raised the concern respectfully and with data/reasoning, not emotion. (2) You genuinely listened to their perspective. (3) You reached a resolution — either you changed your mind, they changed theirs, or you found a compromise. (4) The relationship remained intact.\n\nExample: 'My teammate wanted to use a NoSQL database for our project. I believed a relational database was better for our structured data. I prepared a comparison showing query complexity and data consistency requirements. We discussed it, and they raised a valid point about scalability. We agreed to use PostgreSQL with a caching layer — combining both perspectives.'\n\nAvoid stories where you 'won' and the other person was wrong. The best answers show mutual respect and a better outcome from the disagreement."
+      },
+      {
+        q: "Describe a time you failed and what you learned.",
+        a: "Choose a real failure. Show accountability, learning, and how you applied the lesson.",
+        explanation: "Avoid blaming others. Show ownership, reflection, and concrete change in behavior.",
+        detailedExplanation: "Failure as a Growth Story\n\nThis question tests accountability and growth mindset. Interviewers are not looking for perfection — they want to see how you handle setbacks.\n\nChoose a real failure that: (1) was significant enough to be meaningful, (2) was primarily your responsibility, (3) taught you a clear lesson, and (4) led to a concrete behavior change.\n\nExample: 'In my second-year project, I underestimated the complexity of integrating a third-party payment API. I didn't communicate the delay to my team until the last week, which caused a rushed, buggy implementation. I learned to identify integration risks early and communicate blockers immediately. In my next project, I flagged a similar risk in week 1, and we adjusted the timeline proactively.'\n\nThe formula: What happened → Why it happened (your mistake) → What you learned → How you changed. The most important part is the concrete behavior change — not just 'I learned to communicate better' but 'I now send weekly status updates and flag blockers within 24 hours.'"
+      },
+    ],
+    quiz: [
+      { question: "STAR stands for:", options: ["Story, Task, Action, Review", "Situation, Task, Action, Result", "Summary, Time, Action, Response", "Situation, Topic, Answer, Result"], correctIndex: 1, explanation: "STAR: Situation (context), Task (your responsibility), Action (what you did), Result (measurable outcome)." },
+      { question: "In a conflict story, the best outcome shows:", options: ["You won the argument", "Mutual respect and a better solution", "You gave in to avoid conflict", "The other person was wrong"], correctIndex: 1, explanation: "The best conflict stories show emotional intelligence — respectful disagreement leading to a better outcome for the team." },
+      { question: "When describing a failure, you should:", options: ["Blame external factors", "Show ownership and concrete learning", "Choose a very minor failure", "Avoid the question"], correctIndex: 1, explanation: "Ownership and concrete behavior change demonstrate maturity and growth mindset — exactly what interviewers look for." },
+    ],
+  },
+  {
+    title: "HR Round Questions",
+    timeMinutes: 20,
+    coverImage: "/study-images/interview_prep.svg",
+    concepts: ["Salary Negotiation", "Career Goals", "Work Style", "Situational Questions"],
+    questions: [
+      {
+        q: "What are your salary expectations?",
+        a: "Research market rates. Give a range. Consider total compensation.",
+        explanation: "Example: 'Based on my research, I'm looking at X-Y LPA, open to discussion based on the complete package.'",
+        detailedExplanation: "Salary Negotiation Fundamentals\n\nBefore the interview, research the market rate using Glassdoor, Levels.fyi, AmbitionBox, and LinkedIn Salary Insights — filter by company, role, location, and experience level.\n\nProvide a researched range rather than a single number. A range gives flexibility while anchoring the negotiation. Example: 'Based on my research, I'm looking in the range of X to Y LPA. I'm open to discussing the complete compensation package, including bonuses and growth opportunities.'\n\nNever give a number first if you can avoid it. If pressed, aim for the upper end of your researched range. You can also deflect: 'I'd prefer to understand the full role first. What's the range budgeted for this position?'\n\nConsider total compensation beyond base salary: performance bonuses, RSUs/stock, signing bonus, health insurance, learning budgets, remote flexibility, and career growth speed."
+      },
+      {
+        q: "Where do you see yourself in 5 years?",
+        a: "Show ambition aligned with the company. Mention skill growth and leadership.",
+        explanation: "Example: 'Senior engineer contributing to architecture, mentoring juniors, driving impactful projects.'",
+        detailedExplanation: "Career Vision Alignment\n\nThis tests whether you're likely to stay and grow with the company. The best answers show ambition grounded in realistic progression at the company. Avoid saying you want to start your own company or switch careers.\n\nStructure around three dimensions: technical depth (becoming an expert in distributed systems or cloud architecture), impact (working on larger-scoped projects), and leadership (mentoring and guiding others).\n\nConnect your growth to the company's trajectory. Show learning orientation: mention specific technologies you want to master, certifications you plan to pursue, and leadership skills you want to develop.\n\nExample: 'In 5 years, I see myself as a senior backend engineer with deep expertise in distributed systems. I want to contribute to architectural decisions, mentor junior developers, and lead the technical direction of a product team.'"
+      },
+      {
+        q: "Are you comfortable with relocation or travel?",
+        a: "Be honest. If flexible, say so clearly. If not, explain your constraints professionally.",
+        explanation: "Honesty is better than overpromising. Discuss any constraints professionally and offer alternatives if possible.",
+        detailedExplanation: "Handling Practical HR Questions\n\nBe honest about your constraints — overpromising leads to problems after joining. If you're flexible, say so clearly: 'Yes, I'm open to relocation for the right opportunity.'\n\nIf you have constraints, be professional and solution-oriented: 'I'm currently based in [city] and would prefer to stay here, but I'm open to occasional travel for client meetings or team events.'\n\nFor freshers, most companies understand that relocation is a significant decision. Frame it positively: 'I'm open to discussing relocation — I'd want to understand the role and growth opportunities before committing.'\n\nNever lie about flexibility. If you accept a role with relocation requirements you can't meet, it creates problems for both you and the company."
+      },
+      {
+        q: "Do you have any questions for us?",
+        a: "Always have 2-3 thoughtful questions prepared. Never say 'No, I'm good.'",
+        explanation: "Ask about team culture, growth opportunities, tech stack, or the biggest challenges the team faces.",
+        detailedExplanation: "Questions That Impress\n\nSaying 'No, I don't have any questions' signals low interest. Always prepare 2-3 thoughtful questions that show you've researched the company and thought seriously about the role.\n\nStrong question categories: (1) Role clarity — 'What does success look like in this role after 6 months?' (2) Team culture — 'How does the team handle technical disagreements?' (3) Growth — 'What learning and development opportunities are available?' (4) Challenges — 'What's the biggest technical challenge the team is currently facing?'\n\nAvoid questions about salary, leave policy, or benefits in the first interview — these signal you're more interested in perks than the work. Save those for the offer stage.\n\nThe best questions are specific to what you've learned during the interview: 'You mentioned the team is migrating to microservices — what's the biggest challenge you've faced in that transition?'"
+      },
+    ],
+    quiz: [
+      { question: "In salary discussion, you should:", options: ["Name exact number immediately", "Provide a researched range", "Say you'll accept anything", "Refuse to discuss"], correctIndex: 1, explanation: "A researched range shows preparation and flexibility while anchoring the negotiation in your favor." },
+      { question: "When asked 'Any questions for us?', you should:", options: ["Say no to save time", "Ask about salary immediately", "Ask 2-3 thoughtful, researched questions", "Ask about leave policy"], correctIndex: 2, explanation: "Thoughtful questions signal genuine interest and preparation. Always have 2-3 ready that show you've researched the company." },
+      { question: "The '5 years' question tests:", options: ["Your exact career plan", "Whether you'll stay and grow with the company", "Your salary expectations", "Your technical skills"], correctIndex: 1, explanation: "Interviewers want to see ambition aligned with the company's direction and realistic growth expectations." },
+    ],
+  },
+];
+
 // ─── Python fundamentals ───────────────────────────────────────────────────
 MODULE_SECTIONS["Python fundamentals"] = [
   {
     title: "Python Essentials",
     timeMinutes: 20,
     coverImage: "/study-images/oop_concepts.svg",
-    concepts: ["Dynamic Typing", "List Comprehensions", "Indentation & Style", "Dictionaries & Sets"],
+    concepts: ["Mindset Shift", "Dynamic Typing", "List Comprehensions", "Indentation & Style"],
     questions: [
+      {
+        q: "What is the biggest mental shift when moving from Java to Python?",
+        a: "Moving from 'explicit and verbose' to 'implicit and concise'. You stop writing getters/setters and focus on high-level logic.",
+        explanation: "In Java, you spend time satisfying the compiler. In Python, you spend time writing logic. You trade compile-time safety for development speed.",
+        detailedExplanation: "Java to Python Mindset Shift\n\nJava developers often find Python 'dangerously easy'. In Java, you define classes, private fields, public getters, and handle checked exceptions. In Python, fields are public by default, and 'getters' are replaced by the @property decorator only when logic is needed.\n\nDuck Typing: 'If it walks like a duck and quacks like a duck, it is a duck.' In Java, you must implement an interface. In Python, you just need the object to have the required method. This makes testing and mocking much easier but requires more runtime validation.",
+        javaBridgingNote: "Coming from Java, you'll initially miss the safety of the compiler. Python relies on 'Duck Typing' and runtime checks. You don't need to implement interfaces explicitly anymore—if the object has the method, it works.",
+        isTransitionOnly: true,
+      },
       {
         q: "How does Python's dynamic typing work?",
         a: "In Python, types are associated with objects, not variables. You can reassign a variable to any type at any time.",
         explanation: "x = 5; x = 'hello' is perfectly valid in Python. The interpreter checks types at runtime. This provides flexibility but requires more discipline and unit testing to avoid runtime errors.",
         detailedExplanation: "Dynamic Typing in Python\n\nPython is a dynamically typed language. This means you don't declare the type of a variable when you create one. The type is determined by the value assigned to it at runtime.\n\nNames (variables) are just references to objects in memory. If you reassign a name to a new object of a different type, the old object is eventually garbage collected if no other names reference it.\n\nWhile this makes Python fast to write, it means bugs like 'TypeError: 'NoneType' object is not subscriptable' only appear when the code actually runs. Modern Python uses 'Type Hints' (PEP 484) to allow static analysis with tools like mypy without changing the runtime behavior.",
+        javaBridgingNote: "In Java, you write 'int x = 5;'. In Python, just 'x = 5'. The variable 'x' is just a label. It can point to an integer now and a String later. This is similar to 'Object x' in Java but without the casting boilerplate.",
       },
       {
         q: "What is a list comprehension?",
         a: "A concise way to create lists based on existing iterables: [expression for item in iterable if condition].",
         explanation: "It is more readable and often faster than traditional for-loops for simple transformations.",
         detailedExplanation: "Pythonic List Comprehensions\n\nList comprehensions provide a concise way to create lists. Common use cases are to make new lists where each element is the result of some operation applied to each member of another sequence, or to create a subsequence of those elements that satisfy a certain condition.\n\nExample: squares = [x**2 for x in range(10)]\n\nThey can also include conditionals: evens = [x for x in range(10) if x % 2 == 0]\n\nPython also supports dictionary comprehensions {k: v for ...} and set comprehensions {x for ...}. These are the idiomatic 'Pythonic' way to handle data transformations, replacing the need for map() and filter() in many cases.",
+        javaBridgingNote: "Think of this as a much more concise version of Java's Stream API. Instead of '.stream().filter(x -> x % 2 == 0).map(x -> x * x).collect(Collectors.toList())', you just write '[x*x for x in list if x % 2 == 0]'.",
+      },
+      {
+        q: "What are Python Decorators used for?",
+        a: "A decorator is a function that takes another function and extends its behavior without explicitly modifying it.",
+        explanation: "They are commonly used for logging, access control, and instrumentation.",
+        detailedExplanation: "Python Decorators (Advanced)\n\nIn Python, functions are first-class objects. A decorator is essentially a wrapper that you apply to a function or method using the @decorator_name syntax.\n\nExample:\ndef log_call(func):\n    def wrapper(*args, **kwargs):\n        print(f'Calling {func.__name__}')\n        return func(*args, **kwargs)\n    return wrapper\n\n@log_call\ndef my_func(): pass\n\nDecorators are highly powerful for adhering to the DRY (Don't Repeat Yourself) principle across your codebase.",
+      },
+      {
+        q: "How do Context Managers work in Python?",
+        a: "They manage resources (like files or database connections) using the 'with' statement, ensuring setup and teardown are handled automatically.",
+        explanation: "The 'with' statement guarantees that __exit__() is called even if an exception occurs.",
+        detailedExplanation: "Resource Management with 'with'\n\nContext managers allow you to allocate and release resources precisely when you want to. The most common use is the 'with' statement.\n\nwith open('file.txt', 'w') as f:\n    f.write('Hello')\n\nUnder the hood, the object must implement __enter__() and __exit__(). Python's 'contextlib' module also provides a @contextmanager decorator to create them using generators. This is superior to try/finally blocks for readability.",
       }
     ],
     quiz: [
@@ -721,6 +1108,22 @@ MODULE_SECTIONS["Java Foundations"] = [
         explanation: "You must declare types explicitly: int count = 0; String name = \"Alice\"; List<String> items = new ArrayList<>();. Java 10+ introduced var for local type inference (var list = new ArrayList<String>();) but types are still checked at compile time. Static typing enables better IDE support, refactoring, and prevents runtime type errors.",
         detailedExplanation: "Java's type system — how it works\n\nEvery variable in Java has a declared type verified at compile time. This catches entire classes of bugs early and enables powerful IDE refactoring tools.\n\nPrimitive types (int, boolean, etc.) are stored directly in stack memory for raw performance, while reference types (String, List) hold pointers to objects on the heap.\n\nJava 10+ introduced 'var' for local type inference, which reduces boilerplate without sacrificing the safety of static typing.",
         pythonBridgingNote: "Python determines types at runtime (dynamic). Java checks everything at compile time (static). This prevents most 'TypeError' bugs before they can ever run.",
+        jsBridgingNote: "If you've used TypeScript, this will feel familiar. However, in Java, types are enforced by the JVM itself, not just as a build-step layer. There is no 'any' type in Java—everything must have a rigorous definition.",
+      },
+      {
+        q: "What is the biggest mental shift when moving from Frontend (JS) to Backend (Java)?",
+        a: "Shifting from Event-Driven DOM manipulation to Request-Response lifecycle and multi-threaded server execution.",
+        explanation: "In the browser, you react to user events. On the server, you process a request, interact with a database, and return a response. You stop thinking about 'UI state' and start thinking about 'Persistence and Scale'.",
+        detailedExplanation: "Frontend to Backend Shift\n\n1. No DOM: There is no 'window' or 'document'. You communicate via HTTP, JSON, or gRPC.\n2. Request Lifecycle: Every action starts with an incoming HTTP request and ends with an HTTP response.\n3. Statelessness: Since any server instance might handle a request, you cannot store user data in local variables; you must use a Database or Session Cache (like Redis).\n4. Concurrency: While JS is single-threaded (Event Loop), Java servers handle thousands of concurrent requests using Thread Pools. You must be careful about shared state.",
+        jsBridgingNote: "You stop thinking about 'onClick' and start thinking about 'onRequest'. In JS, everything is non-blocking by default. In Java, while you have non-blocking options, the standard model is 'Thread-per-Request'.",
+        isTransitionOnly: true,
+      },
+      {
+        q: "How does Java handle asynchronous operations compared to JS Promises?",
+        a: "Java uses 'CompletableFuture' or 'Virtual Threads' (Project Loom). They allow for non-blocking operations similar to Promises.",
+        explanation: "CompletableFuture provides methods like .thenApply() (like .then()) and .exceptionally() (like .catch()) to chain async tasks.",
+        detailedExplanation: "Async Paradigms\n\nJavaScript: Single-threaded event loop. Async code is essential to not freeze the UI. Uses Promises and async/await.\n\nJava: Historically multi-threaded. Blocking a thread was okay because you had many. Modern Java (Spring WebFlux) uses 'Reactive Streams' for extreme scale, but most apps use the 'Imperative' style with CompletableFuture for parallel tasks.\n\nCompletableFuture.supplyAsync(() -> fetchData())\n    .thenApply(data -> process(data))\n    .thenAccept(result -> save(result));",
+        jsBridgingNote: "CompletableFuture is Java's 'Promise'. While JS 'await' pauses the current function context, Java's '.join()' or '.get()' actually blocks the thread unless you're using a fully reactive stack like WebFlux.",
       },
       {
         q: "What are Java access modifiers and how do they enforce encapsulation?",
@@ -784,60 +1187,6 @@ MODULE_SECTIONS["Java Foundations"] = [
         description: "Write a Java program that prints numbers from 1 to N.\n\nFor multiples of 3, print **Fizz** instead.\nFor multiples of 5, print **Buzz** instead.\nFor multiples of both 3 and 5, print **FizzBuzz**.",
         hint: "Use the modulo operator (%). Check divisibility by 15 first (both 3 and 5), then by 3, then by 5.",
         examples: [
-          { input: "15", output: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz", explanation: "Numbers 1-15 with Fizz/Buzz replacements." },
-        ],
-        constraints: ["1 ≤ N ≤ 100"],
-        templates: [
-          {
-            id: 62, label: "Java", monacoLang: "java",
-            code: `import java.util.Scanner;\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        int n = sc.nextInt();\n        // Your solution here\n        for (int i = 1; i <= n; i++) {\n            // TODO: print Fizz, Buzz, FizzBuzz, or i\n        }\n    }\n}\n`
-          },
-          {
-            id: 71, label: "Python", monacoLang: "python",
-            code: `import sys\nn = int(sys.stdin.read().strip())\nfor i in range(1, n + 1):\n    # Your solution here\n    pass\n`
-          },
-        ],
-        testCases: [
-          { label: "N=5", input: "5", expected: "1\n2\nFizz\n4\nBuzz" },
-          { label: "N=15", input: "15", expected: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz" },
-        ],
-      },
-    ],
-  },
-];
-
-// ─── Java Backend (Tech Startup) — extra coding section ─────────────────────
-MODULE_SECTIONS["Java Backend Coding"] = [
-  {
-    title: "String Manipulation in Java",
-    timeMinutes: 30,
-    coverImage: "/study-images/dsa_algorithms.png",
-    concepts: ["String Reversal", "Palindrome Detection", "StringBuilder"],
-    questions: [],
-    quiz: [],
-    codingMocks: [
-      {
-        question: "Reverse a String",
-        difficulty: "Easy",
-        description: "Given a string s, return the string reversed.\n\nDo NOT use built-in reverse functions — implement manually.",
-        hint: "Use two pointers or a StringBuilder. Iterate from the end to the beginning.",
-        examples: [
-          { input: "hello", output: "olleh" },
-          { input: "Java", output: "avaJ" },
-        ],
-        constraints: ["1 ≤ s.length ≤ 10⁴", "s contains printable ASCII characters"],
-        templates: [
-          {
-            id: 62, label: "Java", monacoLang: "java",
-            code: `import java.util.Scanner;\npublic class Main {\n    public static String reverse(String s) {\n        // Your solution here\n        return \"\";\n    }\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        String s = sc.nextLine().trim();\n        System.out.println(reverse(s));\n    }\n}\n`
-          },
-          {
-            id: 71, label: "Python", monacoLang: "python",
-            code: `import sys\ns = sys.stdin.read().strip()\ndef reverse(s):\n    # Your solution here\n    return \"\"\nprint(reverse(s))\n`
-          },
-        ],
-        testCases: [
-          { label: "Case 1", input: "hello", expected: "olleh" },
           { label: "Case 2", input: "Java", expected: "avaJ" },
           { label: "Case 3", input: "a", expected: "a" },
           { label: "Case 4", input: "racecar", expected: "racecar" },
@@ -847,8 +1196,523 @@ MODULE_SECTIONS["Java Backend Coding"] = [
   },
 ];
 
-function getSections(title: string): Section[] {
+// ─── Auto-Quiz Generator ─────────────────────────────────────────────────────
+// Creates MCQ quiz questions from Q&A pairs when the AI didn't generate a quiz.
+// Puts the correct answer at a deterministic position (based on index) so it's
+// never the same option for every question.
+type QuizItem = { question: string; options: string[]; correctIndex: number; explanation: string };
+
+function generateFallbackQuiz(questions: Question[]): QuizItem[] {
+  if (!questions || questions.length === 0) return [];
+  const take = Math.min(questions.length, 3); // up to 3 quiz questions
+  const result: QuizItem[] = [];
+
+  for (let i = 0; i < take; i++) {
+    const q = questions[i];
+    const correct = q.a || "See the section content.";
+
+    // Pick 3 other answers as distractors
+    const others = questions
+      .filter((_, j) => j !== i)
+      .map(x => x.a || "")
+      .filter(Boolean)
+      .slice(0, 3);
+
+    // Pad distractors if not enough Q&A
+    const pads = [
+      "None of the above options are correct.",
+      "This concept has no direct implementation.",
+      "It depends on the runtime environment.",
+      "Only in specific edge cases.",
+    ];
+    while (others.length < 3) {
+      others.push(pads[others.length % pads.length]);
+    }
+
+    // Place correct answer at position i % 4 for variety
+    const correctIdx = i % 4;
+    const options: string[] = [...others.slice(0, 3)];
+    options.splice(correctIdx, 0, correct);
+
+    result.push({
+      question: `Which of the following correctly describes: "${q.q}"?`,
+      options: options.slice(0, 4),
+      correctIndex: correctIdx,
+      explanation: q.explanation || q.a || correct,
+    });
+  }
+
+  return result;
+}
+
+// ─── Ensure every section has a quiz ────────────────────────────────────────
+function ensureQuiz(section: Section): Section {
+  if (!section.quiz || section.quiz.length === 0) {
+    const quiz = generateFallbackQuiz(section.questions || []);
+    return { ...section, quiz };
+  }
+  return section;
+}
+
+function getSections(title: string, dynamicPlan?: PlanDetailResponse | null): Section[] {
+  // ── AI Plan Support ──────────────────────────────────────────
+  if (dynamicPlan && dynamicPlan.plan_json && title.startsWith("Day ")) {
+    const dayMatch = title.match(/Day (\d+)/);
+    if (dayMatch) {
+      const dayNum = parseInt(dayMatch[1]);
+      const dailyPlan = Array.isArray(dynamicPlan.plan_json.daily_plan) ? dynamicPlan.plan_json.daily_plan : [];
+      const dayItem = dailyPlan.find((d: any) => d.day === dayNum);
+      if (dayItem) {
+        const storedSkill = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem("primary_skill") : null) || "java";
+        const skillLower = storedSkill.toLowerCase();
+
+        return dayItem.tasks.map((task: any) => {
+          const section: Section = {
+            title: task.title,
+            timeMinutes: task.duration_minutes,
+            questions: [],
+            quiz: [],
+            codingMocks: [],
+            // Use qa_pair questions as concept bullets for the intro slide
+            concepts: task.qa_pairs && task.qa_pairs.length > 0
+              ? task.qa_pairs.slice(0, 5).map((qa: any) => qa.question.slice(0, 50) + (qa.question.length > 50 ? '…' : ''))
+              : (() => {
+                  // Extract topic from title for concept bullets
+                  const coreTopic = task.title.replace(/^(DSA:\s*|Backend:\s*|System Design:\s*|Practice:\s*)/i, "").trim();
+                  return [
+                    `What is ${coreTopic}?`,
+                    `Key operations & complexities`,
+                    `Common interview patterns`,
+                    `Pitfalls to avoid`,
+                  ];
+                })(),
+            coverImage: "/study-images/interview_prep.svg"
+          };
+
+          // ── ALWAYS render as Q&A for Day modules (never coding environment) ──
+          // The coding environment is reserved for the dedicated "Coding Mock Tests" module only.
+          // Even code-type tasks in Day modules have qa_pairs — use those for Q&A display.
+
+          const hasQaPairs = task.qa_pairs && task.qa_pairs.length > 0;
+
+          if (hasQaPairs) {
+            // Primary path: render qa_pairs as Q&A questions with explanations
+            section.questions = task.qa_pairs.map((qa: any) => {
+              const rawExp = qa.explanation || qa.answer || task.description || "";
+              const richExplanation = rawExp.includes('\n\n')
+                ? rawExp
+                : `${task.title}\n\n${rawExp}`;
+
+              const qObj: Question = {
+                q: qa.question,
+                a: qa.answer,
+                explanation: rawExp,
+                detailedExplanation: richExplanation,
+              };
+
+              // Map transition_note to the correct bridging note property
+              if (qa.transition_note) {
+                if (skillLower.includes("python")) qObj.pythonBridgingNote = qa.transition_note;
+                else if (skillLower.includes("java")) qObj.javaBridgingNote = qa.transition_note;
+                else if (skillLower.includes("javascript") || skillLower.includes("frontend") || skillLower.includes("react")) qObj.jsBridgingNote = qa.transition_note;
+                else qObj.pythonBridgingNote = qa.transition_note;
+              }
+
+              return qObj;
+            });
+
+            // Map quiz questions (always shown after Q&A)
+            if (task.quiz && task.quiz.length > 0) {
+              section.quiz = task.quiz.map((qz: any) => ({
+                question: qz.question,
+                options: qz.options,
+                correctIndex: qz.correct_index ?? qz.correctIndex ?? 0,
+                explanation: qz.explanation || "See the section for details."
+              }));
+            }
+
+          } else {
+            // Fallback — no qa_pairs: generate topic-based Q&A from the task title
+            // Extract the core topic from the title (strip "DSA: ", "Backend: " prefixes)
+            const coreTopic = task.title
+              .replace(/^(DSA:\s*|Backend:\s*|System Design:\s*|Practice:\s*)/i, "")
+              .trim();
+
+            section.questions = [
+              {
+                q: `What is ${coreTopic} and why is it important in technical interviews?`,
+                a: `${coreTopic} is a fundamental concept tested in technical interviews. Understanding it deeply helps you solve related problems efficiently.`,
+                explanation: task.description || `${coreTopic} is an important topic for interview preparation.`,
+                detailedExplanation: `${coreTopic}\n\n${task.description || `${coreTopic} is a core concept in computer science and software engineering.`}\n\nUnderstanding ${coreTopic} is essential for solving related interview problems efficiently and explaining your approach clearly.\n\nFocus on the core operations, their time and space complexities, and common patterns used to solve problems in this area.\n\nCommon interview questions test both theoretical understanding and practical implementation — be ready to code solutions from scratch.`
+              },
+              {
+                q: `What are the key operations and time complexities for ${coreTopic}?`,
+                a: `The key operations depend on the specific data structure or algorithm. Focus on best, average, and worst-case complexities.`,
+                explanation: `Time and space complexity analysis is critical for ${coreTopic} interview questions.`,
+                detailedExplanation: `Time & Space Complexity for ${coreTopic}\n\nAlways analyze the time complexity (how runtime grows with input size) and space complexity (how memory usage grows) of your solution.\n\nBig O notation describes the upper bound. O(1) is constant, O(log n) is logarithmic, O(n) is linear, O(n log n) is linearithmic, O(n²) is quadratic.\n\nFor ${coreTopic}, identify the dominant operation and count how many times it executes relative to the input size.\n\nInterview tip: always state the time and space complexity of your solution before the interviewer asks — it shows engineering maturity.`
+              },
+              {
+                q: `What are the most common interview patterns and pitfalls for ${coreTopic}?`,
+                a: `Common patterns include using HashMaps for O(1) lookups, two pointers for sorted arrays, and sliding window for subarray problems.`,
+                explanation: `Recognizing patterns in ${coreTopic} problems helps you apply the right technique quickly.`,
+                detailedExplanation: `Interview Patterns for ${coreTopic}\n\nPattern recognition is the key skill in technical interviews. Most problems are variations of a small set of patterns.\n\nFor ${coreTopic}, common patterns include: brute force (establish correctness first), then optimize using appropriate data structures or algorithms.\n\nCommon pitfalls: off-by-one errors in index calculations, not handling empty input or single-element cases, integer overflow in languages with fixed-size integers.\n\nBest practice: always clarify constraints before coding, start with a brute force solution, then optimize. Explain your thought process out loud throughout.`
+              }
+            ];
+
+            // Still map quiz if present
+            if (task.quiz && task.quiz.length > 0) {
+              section.quiz = task.quiz.map((qz: any) => ({
+                question: qz.question,
+                options: qz.options,
+                correctIndex: qz.correct_index ?? qz.correctIndex ?? 0,
+                explanation: qz.explanation || "See the section for details."
+              }));
+            }
+          }
+
+          return section;
+        });
+      }
+    }
+  }
+
+  // ── Strategic AI Roadmap Overview Section ──────────────────────
+  if (title === "Strategic AI Roadmap" && dynamicPlan) {
+    const overview = dynamicPlan.plan_json.overview || "";
+    const resources = dynamicPlan.plan_json.resources || [];
+    return [{
+      title: "Strategy Overview",
+      timeMinutes: 10,
+      coverImage: "/study-images/interview_prep.svg",
+      concepts: ["Personalized Strategy", "Interview Roadmap", "Key Focus Areas", "Learning Path"],
+      questions: [
+        {
+          q: "What is my personalized interview preparation strategy?",
+          a: overview,
+          explanation: overview,
+          detailedExplanation: `Your Interview Strategy\n\n${overview}\n\nKey resources for your preparation: ${resources.slice(0, 3).join(', ') || 'Review the day modules for curated resources'}.\n\nComplete each day module in sequence to build progressive mastery — each day builds on the previous.\n\nQuiz modules at the end of each section reinforce learning and track your knowledge progress.`
+        }
+      ],
+      quiz: [
+        {
+          question: "What is the primary goal of a structured interview preparation plan?",
+          options: ["To memorize all answers", "To progressively build skills and track progress", "To complete modules as fast as possible", "To only focus on coding"],
+          correctIndex: 1,
+          explanation: "A structured plan builds skills progressively — each day's module builds on the previous, ensuring deep understanding rather than surface-level memorization."
+        },
+        {
+          question: "Why are quiz modules included at the end of each study section?",
+          options: ["To add difficulty", "To waste time", "To reinforce learning and identify weak areas", "To replace practice coding"],
+          correctIndex: 2,
+          explanation: "End-of-section quizzes test comprehension immediately after learning, which is proven to improve retention and surface knowledge gaps while the material is fresh."
+        },
+        {
+          question: "What should you prioritize in the first two days of preparation?",
+          options: ["Mock interviews only", "Missing skills and foundational concepts", "Only coding problems", "Resume editing"],
+          correctIndex: 1,
+          explanation: "Days 1-2 should address missing/weak skills first — these are the most likely disqualifiers in interviews. Foundational gaps must be closed before advanced topics."
+        }
+      ]
+    }];
+  }
+
+  // ── Behavioral Interview module for AI plans ──────────────────
+  if (title === "Behavioral Interview" && dynamicPlan) {
+    // Find the last day in the AI plan that has focus "Behavioral Interview"
+    const behavioralDay = (Array.isArray(dynamicPlan.plan_json?.daily_plan) ? dynamicPlan.plan_json.daily_plan : [])
+      .slice()
+      .reverse()
+      .find((day: any) => day.focus?.toLowerCase().includes("behavioral"));
+
+    if (behavioralDay) {
+      return behavioralDay.tasks.map((task: any) => {
+        const section: Section = {
+          title: task.title,
+          timeMinutes: task.duration_minutes || 30,
+          coverImage: "/study-images/interview_prep.svg",
+          concepts: task.qa_pairs && task.qa_pairs.length > 0
+            ? task.qa_pairs.slice(0, 5).map((qa: any) => qa.question.slice(0, 50) + (qa.question.length > 50 ? '…' : ''))
+            : [task.title],
+          questions: [],
+          quiz: [],
+          codingMocks: [],
+        };
+
+        if (task.qa_pairs && task.qa_pairs.length > 0) {
+          section.questions = task.qa_pairs.map((qa: any) => {
+            const rawExp = qa.explanation || qa.answer || task.description || "";
+            const richExplanation = rawExp.includes('\n\n')
+              ? rawExp
+              : `${task.title}\n\n${rawExp}`;
+            return {
+              q: qa.question,
+              a: qa.answer,
+              explanation: rawExp,
+              detailedExplanation: richExplanation,
+            };
+          });
+        }
+
+        if (task.quiz && task.quiz.length > 0) {
+          section.quiz = task.quiz.map((qz: any) => ({
+            question: qz.question,
+            options: qz.options,
+            correctIndex: qz.correct_index ?? qz.correctIndex ?? 0,
+            explanation: qz.explanation || "See the section for details."
+          }));
+        }
+
+        return section;
+      });
+    }
+
+    // Fallback: return hardcoded behavioral sections
+    return MODULE_SECTIONS["Behavioral Interview"] || MODULE_SECTIONS["mock interviews"] || [];
+  }
+
+  // ── Coding Mock Tests module for AI plans ──────────────────────
+  if (title === "Coding Mock Tests" && dynamicPlan) {
+
+    // ── Rich DSA problem library for fallback enrichment ──────────────────
+    // Used when AI-generated code_metadata has empty description/examples/test_cases
+    const DSA_PROBLEMS: Record<string, {
+      description: string;
+      hint: string;
+      difficulty: string;
+      examples: { input: string; output: string; explanation: string }[];
+      constraints: string[];
+      test_cases: { input: string; expected: string; label: string }[];
+    }> = {
+      "Two Sum": {
+        difficulty: "Easy",
+        description: `Given an array of integers \`nums\` and an integer \`target\`, return the indices of the two numbers such that they add up to \`target\`.\n\nYou may assume that each input would have exactly one solution, and you may not use the same element twice.\n\nYou can return the answer in any order.\n\nThis is one of the most fundamental interview problems. The naive O(n²) approach uses nested loops. The optimal O(n) approach uses a HashMap to store each number's index as you iterate — for each number, check if its complement (target - num) already exists in the map.`,
+        hint: "Use a HashMap to store each number and its index as you iterate. For each element, check if (target - element) already exists in the map. This gives O(n) time and O(n) space.",
+        examples: [
+          { input: "nums = [2,7,11,15], target = 9", output: "[0,1]", explanation: "nums[0] + nums[1] = 2 + 7 = 9, so return [0, 1]." },
+          { input: "nums = [3,2,4], target = 6", output: "[1,2]", explanation: "nums[1] + nums[2] = 2 + 4 = 6, so return [1, 2]." },
+          { input: "nums = [3,3], target = 6", output: "[0,1]", explanation: "nums[0] + nums[1] = 3 + 3 = 6, so return [0, 1]." },
+        ],
+        constraints: ["2 <= nums.length <= 10⁴", "-10⁹ <= nums[i] <= 10⁹", "-10⁹ <= target <= 10⁹", "Only one valid answer exists."],
+        test_cases: [
+          { input: "[2,7,11,15]\n9", expected: "[0, 1]", label: "Basic case" },
+          { input: "[3,2,4]\n6", expected: "[1, 2]", label: "Non-adjacent pair" },
+          { input: "[3,3]\n6", expected: "[0, 1]", label: "Duplicate values" },
+          { input: "[-1,-2,-3,-4,-5]\n-8", expected: "[2, 4]", label: "Negative numbers" },
+          { input: "[0,4,3,0]\n0", expected: "[0, 3]", label: "Zero target" },
+        ],
+      },
+      "Reverse Linked List": {
+        difficulty: "Easy",
+        description: `Given the \`head\` of a singly linked list, reverse the list, and return the reversed list.\n\nA linked list can be reversed either iteratively or recursively.\n\n**Iterative approach:** Use three pointers — \`prev\` (initially null), \`curr\` (initially head), and \`next_node\`. In each step: save \`curr.next\`, point \`curr.next\` to \`prev\`, advance \`prev\` to \`curr\`, advance \`curr\` to \`next_node\`. When \`curr\` is null, \`prev\` is the new head.\n\n**Recursive approach:** Reverse the rest of the list, then make the next node point back to the current node. Time: O(n), Space: O(n) due to call stack.`,
+        hint: "For the iterative approach, maintain three pointers: prev=None, curr=head. In each iteration: save next=curr.next, set curr.next=prev, advance prev=curr, advance curr=next. Return prev when curr is None.",
+        examples: [
+          { input: "head = [1,2,3,4,5]", output: "[5,4,3,2,1]", explanation: "The linked list 1→2→3→4→5 becomes 5→4→3→2→1." },
+          { input: "head = [1,2]", output: "[2,1]", explanation: "The linked list 1→2 becomes 2→1." },
+          { input: "head = []", output: "[]", explanation: "Empty list remains empty." },
+        ],
+        constraints: ["The number of nodes in the list is in the range [0, 5000].", "-5000 <= Node.val <= 5000"],
+        test_cases: [
+          { input: "[1,2,3,4,5]", expected: "[5, 4, 3, 2, 1]", label: "Standard list" },
+          { input: "[1,2]", expected: "[2, 1]", label: "Two nodes" },
+          { input: "[]", expected: "[]", label: "Empty list" },
+          { input: "[1]", expected: "[1]", label: "Single node" },
+          { input: "[1,2,3]", expected: "[3, 2, 1]", label: "Three nodes" },
+        ],
+      },
+      "Maximum Subarray": {
+        difficulty: "Medium",
+        description: `Given an integer array \`nums\`, find the subarray with the largest sum, and return its sum.\n\nA subarray is a contiguous non-empty sequence of elements within an array.\n\n**Kadane's Algorithm** solves this in O(n) time and O(1) space:\n- Maintain two variables: \`max_ending_here\` (max sum ending at current position) and \`max_so_far\` (global maximum).\n- At each element: \`max_ending_here = max(nums[i], max_ending_here + nums[i])\`\n- Update: \`max_so_far = max(max_so_far, max_ending_here)\`\n\nThe key insight: if the running sum becomes negative, it's better to start fresh from the current element rather than carry a negative prefix.`,
+        hint: "Use Kadane's Algorithm: track max_ending_here = max(nums[i], max_ending_here + nums[i]) and max_so_far = max(max_so_far, max_ending_here). Initialize both to nums[0].",
+        examples: [
+          { input: "nums = [-2,1,-3,4,-1,2,1,-5,4]", output: "6", explanation: "The subarray [4,-1,2,1] has the largest sum = 6." },
+          { input: "nums = [1]", output: "1", explanation: "Single element — the only subarray is [1] with sum 1." },
+          { input: "nums = [5,4,-1,7,8]", output: "23", explanation: "The entire array [5,4,-1,7,8] has sum 23." },
+        ],
+        constraints: ["1 <= nums.length <= 10⁵", "-10⁴ <= nums[i] <= 10⁴"],
+        test_cases: [
+          { input: "[-2,1,-3,4,-1,2,1,-5,4]", expected: "6", label: "Mixed positive/negative" },
+          { input: "[1]", expected: "1", label: "Single element" },
+          { input: "[5,4,-1,7,8]", expected: "23", label: "All positive" },
+          { input: "[-1,-2,-3,-4]", expected: "-1", label: "All negative" },
+          { input: "[1,-1,1,-1,1]", expected: "1", label: "Alternating" },
+        ],
+      },
+      "Valid Parentheses": {
+        difficulty: "Easy",
+        description: `Given a string \`s\` containing just the characters \`'('\`, \`')'\`, \`'{'\`, \`'}'\`, \`'['\` and \`']'\`, determine if the input string is valid.\n\nAn input string is valid if:\n1. Open brackets must be closed by the same type of brackets.\n2. Open brackets must be closed in the correct order.\n3. Every close bracket has a corresponding open bracket of the same type.\n\n**Approach:** Use a stack. For each character:\n- If it's an opening bracket, push it onto the stack.\n- If it's a closing bracket, check if the stack is non-empty and the top matches. If not, return false.\n- At the end, the stack must be empty (all brackets matched).`,
+        hint: "Use a stack. Push opening brackets. For closing brackets, check if the stack top is the matching opener. Use a HashMap: ')' → '(', '}' → '{', ']' → '['. Return true only if the stack is empty at the end.",
+        examples: [
+          { input: 's = "()"', output: "true", explanation: "Single pair of matching parentheses." },
+          { input: 's = "()[]{}"', output: "true", explanation: "Three pairs of different bracket types, all matching." },
+          { input: 's = "(]"', output: "false", explanation: "Opening '(' is closed by ']' — wrong type." },
+        ],
+        constraints: ["1 <= s.length <= 10⁴", "s consists of parentheses only '()[]{}'."],
+        test_cases: [
+          { input: "()", expected: "true", label: "Simple pair" },
+          { input: "()[]{}", expected: "true", label: "Multiple types" },
+          { input: "(]", expected: "false", label: "Wrong closing" },
+          { input: "([)]", expected: "false", label: "Interleaved" },
+          { input: "{[]}", expected: "true", label: "Nested" },
+        ],
+      },
+      "Binary Search": {
+        difficulty: "Easy",
+        description: `Given an array of integers \`nums\` which is sorted in ascending order, and an integer \`target\`, write a function to search \`target\` in \`nums\`. If \`target\` exists, return its index. Otherwise, return \`-1\`.\n\nYou must write an algorithm with O(log n) runtime complexity.\n\n**Algorithm:**\n1. Set \`left = 0\`, \`right = len(nums) - 1\`\n2. While \`left <= right\`: compute \`mid = left + (right - left) // 2\`\n3. If \`nums[mid] == target\`: return \`mid\`\n4. If \`nums[mid] < target\`: search right half (\`left = mid + 1\`)\n5. If \`nums[mid] > target\`: search left half (\`right = mid - 1\`)\n6. Return \`-1\` if not found\n\n**Important:** Use \`mid = left + (right - left) // 2\` to avoid integer overflow.`,
+        hint: "Use left + (right - left) // 2 for mid to avoid overflow. The loop condition is left <= right (inclusive). Move left = mid + 1 when target > nums[mid], right = mid - 1 when target < nums[mid].",
+        examples: [
+          { input: "nums = [-1,0,3,5,9,12], target = 9", output: "4", explanation: "9 exists in nums and its index is 4." },
+          { input: "nums = [-1,0,3,5,9,12], target = 2", output: "-1", explanation: "2 does not exist in nums so return -1." },
+        ],
+        constraints: ["1 <= nums.length <= 10⁴", "-10⁴ < nums[i], target < 10⁴", "All the integers in nums are unique.", "nums is sorted in ascending order."],
+        test_cases: [
+          { input: "[-1,0,3,5,9,12]\n9", expected: "4", label: "Target found" },
+          { input: "[-1,0,3,5,9,12]\n2", expected: "-1", label: "Target not found" },
+          { input: "[5]\n5", expected: "0", label: "Single element found" },
+          { input: "[5]\n3", expected: "-1", label: "Single element not found" },
+          { input: "[1,2,3,4,5]\n1", expected: "0", label: "First element" },
+        ],
+      },
+      "Climbing Stairs": {
+        difficulty: "Easy",
+        description: `You are climbing a staircase. It takes \`n\` steps to reach the top.\n\nEach time you can either climb \`1\` or \`2\` steps. In how many distinct ways can you climb to the top?\n\n**Key insight:** To reach step \`n\`, you either came from step \`n-1\` (took 1 step) or step \`n-2\` (took 2 steps). So \`ways(n) = ways(n-1) + ways(n-2)\` — this is the Fibonacci sequence!\n\n**Approaches:**\n- Naive recursion: O(2ⁿ) — recomputes subproblems\n- Memoization: O(n) time, O(n) space\n- Tabulation: O(n) time, O(n) space\n- Space-optimized: O(n) time, O(1) space — only keep last two values`,
+        hint: "This is Fibonacci! ways(n) = ways(n-1) + ways(n-2). Base cases: ways(1) = 1, ways(2) = 2. Use two variables (prev2, prev1) for O(1) space.",
+        examples: [
+          { input: "n = 2", output: "2", explanation: "Two ways: (1 step + 1 step) or (2 steps)." },
+          { input: "n = 3", output: "3", explanation: "Three ways: (1+1+1), (1+2), (2+1)." },
+        ],
+        constraints: ["1 <= n <= 45"],
+        test_cases: [
+          { input: "2", expected: "2", label: "n=2" },
+          { input: "3", expected: "3", label: "n=3" },
+          { input: "1", expected: "1", label: "n=1" },
+          { input: "5", expected: "8", label: "n=5" },
+          { input: "10", expected: "89", label: "n=10" },
+        ],
+      },
+    };
+
+    // Helper: find the best matching problem from the library
+    const findProblemData = (taskTitle: string) => {
+      const titleLower = taskTitle.toLowerCase();
+      // Exact match first
+      for (const [key, val] of Object.entries(DSA_PROBLEMS)) {
+        if (titleLower.includes(key.toLowerCase())) return val;
+      }
+      // Partial keyword match
+      if (titleLower.includes("two sum") || titleLower.includes("array") || titleLower.includes("string")) return DSA_PROBLEMS["Two Sum"];
+      if (titleLower.includes("linked") || titleLower.includes("reverse")) return DSA_PROBLEMS["Reverse Linked List"];
+      if (titleLower.includes("subarray") || titleLower.includes("kadane") || titleLower.includes("maximum")) return DSA_PROBLEMS["Maximum Subarray"];
+      if (titleLower.includes("parenthes") || titleLower.includes("bracket") || titleLower.includes("stack")) return DSA_PROBLEMS["Valid Parentheses"];
+      if (titleLower.includes("binary search") || titleLower.includes("search")) return DSA_PROBLEMS["Binary Search"];
+      if (titleLower.includes("stair") || titleLower.includes("climb") || titleLower.includes("dp") || titleLower.includes("dynamic")) return DSA_PROBLEMS["Climbing Stairs"];
+      return null;
+    };
+
+    // Collect all code-type tasks from the AI plan
+    const codingTasks: Section[] = [];
+    const dailyPlanForCoding = Array.isArray(dynamicPlan.plan_json?.daily_plan) ? dynamicPlan.plan_json.daily_plan : [];
+    for (const day of dailyPlanForCoding) {
+      for (const task of day.tasks) {
+        if (task.task_type === 'code' && task.code_metadata) {
+          const cm = task.code_metadata;
+          const primaryLang = (cm.language || 'Python').toLowerCase();
+
+          // ── Build 4-language templates ──────────────────────────────────
+          const problemName = task.title.replace(/^DSA:\s*/i, '').trim();
+          const fnName = problemName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'solution';
+
+          const pythonCode = primaryLang === 'python' && cm.initial_code
+            ? cm.initial_code
+            : `def ${fnName}(nums, target):\n    # Write your solution here\n    # Hint: consider using a HashMap for O(n) time\n    pass\n\n# Read input\nimport sys\ndata = sys.stdin.read().splitlines()\nnums = list(map(int, data[0].strip('[]').split(',')))\ntarget = int(data[1])\nprint(${fnName}(nums, target))\n`;
+
+          const javaCode = primaryLang === 'java' && cm.initial_code
+            ? cm.initial_code
+            : `import java.util.*;\npublic class Main {\n    public static int[] ${fnName}(int[] nums, int target) {\n        // Write your solution here\n        // Hint: use a HashMap<Integer, Integer> for O(n) time\n        return new int[]{};\n    }\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Parse input and call ${fnName}()\n        System.out.println(Arrays.toString(${fnName}(new int[]{2,7,11,15}, 9)));\n    }\n}\n`;
+
+          const jsCode = primaryLang === 'javascript' && cm.initial_code
+            ? cm.initial_code
+            : `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${fnName} = function(nums, target) {\n    // Write your solution here\n    // Hint: use a Map for O(n) time\n};\n\n// Test\nconsole.log(${fnName}([2,7,11,15], 9)); // [0,1]\n`;
+
+          const cppCode = (primaryLang === 'cpp' || primaryLang === 'c++') && cm.initial_code
+            ? cm.initial_code
+            : `#include <bits/stdc++.h>\nusing namespace std;\nvector<int> ${fnName}(vector<int>& nums, int target) {\n    // Write your solution here\n    // Hint: use unordered_map<int,int> for O(n) time\n    return {};\n}\nint main() {\n    vector<int> nums = {2, 7, 11, 15};\n    int target = 9;\n    auto result = ${fnName}(nums, target);\n    for (int x : result) cout << x << " ";\n    return 0;\n}\n`;
+
+          const templates = [
+            { id: 71, label: "Python",     monacoLang: "python",     code: pythonCode },
+            { id: 62, label: "Java",       monacoLang: "java",       code: javaCode },
+            { id: 63, label: "JavaScript", monacoLang: "javascript", code: jsCode },
+            { id: 54, label: "C++",        monacoLang: "cpp",        code: cppCode },
+          ];
+
+          // ── Enrich empty code_metadata with library data ────────────────
+          const libData = findProblemData(task.title);
+
+          const description = (cm.description && cm.description.trim() && cm.description !== task.description)
+            ? cm.description
+            : (libData?.description || task.description || `Solve the ${problemName} problem. Analyze the constraints carefully and choose the optimal algorithm.`);
+
+          const hint = cm.hint || libData?.hint || null;
+
+          const examples = (Array.isArray(cm.examples) && cm.examples.length > 0)
+            ? cm.examples
+            : (libData?.examples || []);
+
+          const constraints = (Array.isArray(cm.constraints) && cm.constraints.length > 0)
+            ? cm.constraints
+            : (libData?.constraints || ['1 <= input.length <= 10⁴', 'Values fit in a 32-bit integer']);
+
+          const testCases = (Array.isArray(cm.test_cases) && cm.test_cases.length > 0)
+            ? cm.test_cases.map((tc: any) => ({ input: tc.input, expected: tc.expected, label: tc.label || `Case` }))
+            : (libData?.test_cases || [
+                { input: "sample_input", expected: "sample_output", label: "Case 1" }
+              ]);
+
+          const difficulty = cm.difficulty || libData?.difficulty || 'Medium';
+
+          codingTasks.push({
+            title: task.title,
+            timeMinutes: task.duration_minutes || 45,
+            coverImage: "/study-images/interview_prep.svg",
+            concepts: constraints.slice(0, 4).length > 0
+              ? constraints.slice(0, 4)
+              : [task.title, 'Time Complexity', 'Space Complexity', 'Edge Cases'],
+            questions: [],
+            quiz: task.quiz ? task.quiz.map((qz: any) => ({
+              question: qz.question,
+              options: qz.options,
+              correctIndex: qz.correct_index ?? qz.correctIndex ?? 0,
+              explanation: qz.explanation || ""
+            })) : [],
+            codingMocks: [{
+              question: problemName,
+              description,
+              difficulty,
+              examples,
+              constraints,
+              hint,
+              templates,
+              testCases,
+            }]
+          });
+        }
+      }
+    }
+
+    // Fallback if AI didn't generate any code tasks
+    if (codingTasks.length === 0) {
+      return MODULE_SECTIONS["Coding Mock Tests"] || MODULE_SECTIONS["Java Backend Coding"] || [];
+    }
+    return codingTasks;
+  }
+
+  // ── Hardcoded Fallback (Legacy) ──────────────────────────────
   if (MODULE_SECTIONS[title] && MODULE_SECTIONS[title].length > 0) return MODULE_SECTIONS[title];
+  
+  // ── Behavioral Interview fallback (for hardcoded plans) ──────
+  if (title === "Behavioral Interview" || title === "Mock interviews" || title === "HR round prep" || title === "Behavioral preparation") {
+    return MODULE_SECTIONS["Behavioral Interview"] || MODULE_SECTIONS["Mock interviews"] || [];
+  }
+  
   return [{
     title: "Overview",
     timeMinutes: 10,
@@ -870,14 +1734,12 @@ const ALL_PLANS = [
 
 type StudyPlanMeta = (typeof ALL_PLANS)[number];
 
-function getModulesForCompany(company: string, primarySkill: string, role?: string) {
-  // Named company plans take priority (hardcoded presets)
-  if (PLAN_MODULES[company]) return PLAN_MODULES[company];
-
+function getModulesForCompany(company: string, primarySkill: string, role?: string, dynamicPlan?: PlanDetailResponse | null) {
+  // ── Calculate Standard Modules (Fallback/Reference) ────────────
+  let standardModules = [];
   const sk = primarySkill.trim().toLowerCase();
   const rl = (role || "").trim().toLowerCase();
 
-  // ── Detect source (student's skill) ───────────────────────────
   const isPython   = sk.includes("python");
   const isJava     = sk.includes("java");
   const isFrontend = sk.includes("frontend") || sk.includes("react") ||
@@ -885,99 +1747,104 @@ function getModulesForCompany(company: string, primarySkill: string, role?: stri
   const isBackend  = sk.includes("backend") || sk.includes("node") ||
                      sk.includes("django") || sk.includes("spring");
 
-  // ── Detect target (job role) ───────────────────────────────────
   const wantsJava    = rl.includes("java");
   const wantsPython  = rl.includes("python");
   const wantsBackend = rl.includes("backend");
   const wantsFront   = rl.includes("frontend");
 
-  // ── Scenario 1: Python Developer → Java role (inline comparisons in first module) ─
-  if (isPython && (wantsJava || wantsBackend)) {
-    return [
-      { title: "Java Foundations", sub: "Types, OOP, Syntax — with Python comparisons", progress: 0, color: "#22c55e" },
-      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#3b82f6" },
-      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
-      { title: "Java Backend Coding", sub: "Live Sandbox, Test Cases", progress: 0, color: "#a78bfa" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
-    ];
-  }
-
-  // ── Scenario 2: Java Developer → Java role (POLISH) ───────────
-  if (isJava && (wantsJava || wantsBackend)) {
-    return [
-      { title: "Java Foundations", sub: "OOP, Collections, Streams", progress: 0, color: "#22c55e" },
-      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#3b82f6" },
-      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#f59e0b" },
-      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
-      { title: "Java Backend Coding", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
-    ];
-  }
-
-  // ── Scenario 3: Java Developer → Python role (TRANSITION) ─────
-  if (isJava && wantsPython) {
-    return [
-      { title: "Java to Python Transition", sub: "Syntax, Typing, Paradigm Shift", progress: 0, color: "#22c55e" },
-      { title: "Python fundamentals", sub: "OOP, Data Structures, Exceptions", progress: 0, color: "#3b82f6" },
-      { title: "SQL + database design", sub: "Queries, Joins, Aggregation", progress: 0, color: "#f59e0b" },
-      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
-    ];
-  }
-
-  // ── Scenario 4: Python Developer → Python role (POLISH) ───────
-  if (isPython && wantsPython) {
-    return [
-      { title: "Python fundamentals", sub: "OOP, Data Structures, Exceptions", progress: 0, color: "#22c55e" },
+  if (PLAN_MODULES[company]) {
+    standardModules = PLAN_MODULES[company];
+  } else if (wantsPython) {
+    standardModules = [
+      { title: "Python fundamentals", sub: "OOP, Data Structures", progress: 0, color: "#22c55e" },
       { title: "SQL + database design", sub: "Queries, Joins, Aggregation", progress: 0, color: "#3b82f6" },
       { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
-    ];
-  }
-
-  // ── Scenario 5: Frontend Developer → Backend role (TRANSITION) ─
-  if (isFrontend && wantsBackend) {
-    return [
-      { title: "Frontend to Backend Shift", sub: "Server-side thinking, APIs, Auth", progress: 0, color: "#22c55e" },
-      { title: "Java Foundations", sub: "OOP, Collections, Streams", progress: 0, color: "#3b82f6" },
-      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#f59e0b" },
-      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
       { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+      { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
     ];
-  }
-
-  // ── Scenario 6: Backend Developer → Backend role (POLISH) ─────
-  if (isBackend && wantsBackend) {
-    return [
-      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#22c55e" },
-      { title: "SQL + database design", sub: "Joins, Indexing, Optimization", progress: 0, color: "#3b82f6" },
-      { title: "System Design", sub: "Scalability, CAP, Databases", progress: 0, color: "#f59e0b" },
-      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#a78bfa" },
+  } else if (wantsJava || wantsBackend) {
+    standardModules = [
+      { title: "Java Foundations", sub: "Types, OOP, Syntax", progress: 0, color: "#22c55e" },
+      { title: "Spring Boot + microservices", sub: "REST, JPA, Docker", progress: 0, color: "#3b82f6" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
+      { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#a78bfa" },
+      { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
+    ];
+  } else if (wantsFront) {
+    standardModules = [
+      { title: "Frontend foundations", sub: "JS, React, CSS Architecture", progress: 0, color: "#22c55e" },
+      { title: "System Design (Frontend)", sub: "Performance, State, Auth", progress: 0, color: "#3b82f6" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
       { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-      { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
+      { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
+    ];
+  } else {
+    standardModules = [
+      { title: `${primarySkill || "Core"} fundamentals`, sub: "Concepts, Problem Solving", progress: 0, color: "#22c55e" },
+      { title: "SQL + database design", sub: "Joins, Indexing", progress: 0, color: "#3b82f6" },
+      { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
+      { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
+      { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316" },
     ];
   }
 
-  // ── Frontend → Frontend (same stack polish) ────────────────────
-  if (isFrontend && wantsFront) {
+  // ── AI Plan Priority ──────────────────────────────────────────
+  if (dynamicPlan && dynamicPlan.plan_json && Array.isArray(dynamicPlan.plan_json.daily_plan) && dynamicPlan.plan_json.daily_plan.length > 0) {
+    // Detect if any day has a coding-type task to know if there's a coding module
+    const hasCodingDay = dynamicPlan.plan_json.daily_plan.some(
+      (day: any) => day.tasks?.some((t: any) => t.task_type === 'code')
+    );
+
+    // Map each day as a module, skipping dedicated Coding Mock Tests and Behavioral Interview days
+    const aiModules = dynamicPlan.plan_json.daily_plan
+      .filter((day: any) => {
+        // Skip dedicated Coding Mock Tests day (focus explicitly says "Coding Mock Tests")
+        const isCodingMockDay = day.focus?.toLowerCase().includes("coding mock");
+        // Skip dedicated Behavioral Interview day
+        const isBehavioral = day.focus?.toLowerCase().includes("behavioral");
+        return !isCodingMockDay && !isBehavioral;
+      })
+      .map((day: any) => {
+        // If focus is just "Day N/M" (old plan format), extract topic from first task title
+        const rawFocus: string = day.focus || "";
+        const isGenericFocus = /^Day\s+\d+\/\d+$/.test(rawFocus.trim());
+        let displayFocus = rawFocus;
+        if (isGenericFocus && day.tasks && day.tasks.length > 0) {
+          // Use the first non-quiz task's title as the topic
+          const firstTask = day.tasks.find((t: any) => !t.title?.toLowerCase().includes("mastery quiz") && !t.title?.toLowerCase().includes("module mastery"));
+          if (firstTask) {
+            // Strip prefixes like "DSA: " or "Backend: " for cleaner display
+            displayFocus = firstTask.title.replace(/^(DSA:\s*|Backend:\s*|System Design:\s*)/i, "").trim();
+          }
+        }
+        return {
+          title: `Day ${day.day}: ${displayFocus}`,
+          sub: `${day.tasks.length} interactive tasks`,
+          progress: 0,
+          color: "#8b5cf6",
+          isAI: true
+        };
+      });
+
+    // Always add a dedicated Coding Mock Tests module for AI plans
+    const codingModule = {
+      title: "Coding Mock Tests",
+      sub: "Live Sandbox, Test Cases",
+      progress: 0,
+      color: "#22c55e",
+      isAI: true,
+      isCodingModule: true,
+    };
+
     return [
-      { title: "Java / Python fundamentals", sub: "OOP, Collections, Streams", progress: 0, color: "#22c55e" },
-      { title: "Algorithms & Data Structures", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#3b82f6" },
-      { title: "System Design", sub: "Scalability, CAP, Databases", progress: 0, color: "#f59e0b" },
-      { title: "Behavioral preparation", sub: "STAR method, Leadership", progress: 0, color: "#e2e8f0" },
-      { title: "Mock interviews", sub: "Technical, HR, Case", progress: 0, color: "#e2e8f0" },
+      { title: "Strategic AI Roadmap", sub: "AI strategy overview", progress: 0, color: "#7c3aed", isAI: true },
+      ...aiModules,
+      codingModule,
+      { title: "Behavioral Interview", sub: "HR & Behavioral Questions", progress: 0, color: "#f97316", isAI: true, isBehavioralModule: true },
     ];
   }
 
-  // ── Generic fallback ──────────────────────────────────────────
-  return [
-    { title: `${primarySkill || "Core"} fundamentals`, sub: "Concepts, Problem Solving", progress: 0, color: "#22c55e" },
-    { title: "SQL + database design", sub: "Joins, Indexing", progress: 0, color: "#3b82f6" },
-    { title: "DSA", sub: "Arrays, Trees, Graphs, DP", progress: 0, color: "#f59e0b" },
-    { title: "Coding Mock Tests", sub: "Live Sandbox, Test Cases", progress: 0, color: "#ec4899" },
-    { title: "Mock interviews", sub: "Behavioral, Technical, HR", progress: 0, color: "#e2e8f0" },
-  ];
+  return standardModules;
 }
 
 function toPoints(text: string): string[] {
@@ -1181,17 +2048,56 @@ function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, 
           </p>
         </div>
 
-        {/* Detailed Explanation Block — BULLET POINTS, NO IMAGES */}
-        <div style={{ borderTop: '0.5px solid #e5e7eb', padding: '10px 16px 16px' }}>
+        {/* Detailed Explanation Block — BULLET POINTS, minimum 4 */}
+        <div className="flex-1 overflow-y-auto editorial-scrollbar" style={{ borderTop: '0.5px solid #e5e7eb', padding: '10px 16px 16px' }}>
           <div className="flex items-center gap-2 mb-4">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#f59e0b' }} />
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#f59e0b' }}>DETAILED EXPLANATION</p>
           </div>
 
-          {question.detailedExplanation ? (() => {
-            const paragraphs = question.detailedExplanation.split('\n\n').filter(Boolean);
-            const heading = paragraphs[0] || '';
-            const bodyParagraphs = paragraphs.slice(1);
+          {(() => {
+            const rawText = question.detailedExplanation || question.explanation || question.a || "";
+            
+            // Split by \n\n first to get paragraphs
+            const rawParagraphs = rawText.split('\n\n').filter(Boolean);
+            const heading = rawParagraphs[0] || question.q || "";
+            let bodyParagraphs = rawParagraphs.slice(1);
+            
+            // If body has fewer than 4 paragraphs, split long paragraphs by sentences
+            if (bodyParagraphs.length < 4) {
+              const expanded: string[] = [];
+              for (const para of bodyParagraphs) {
+                // Split on ". " followed by capital letter, or on "; "
+                const sentences = para.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [para];
+                const cleaned = sentences.map(s => s.trim()).filter(s => s.length > 10);
+                if (cleaned.length > 1) {
+                  // Push each sentence as a bullet
+                  expanded.push(...cleaned);
+                } else {
+                  expanded.push(para);
+                }
+              }
+              bodyParagraphs = expanded;
+            }
+            
+            // Still too few? Split the raw answer by sentences as fallback
+            if (bodyParagraphs.length < 4) {
+              const fullText = rawText.replace(/^[^\n]+(\n\n)?/, ''); // remove heading
+              const extraSentences = (fullText || rawText).match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [];
+              const extras = extraSentences.map(s => s.trim()).filter(s => s.length > 15 && !bodyParagraphs.includes(s));
+              bodyParagraphs = [...bodyParagraphs, ...extras].slice(0, Math.max(bodyParagraphs.length, 4));
+            }
+            
+            // Ensure minimum 4 bullets — pad with context if still short
+            while (bodyParagraphs.length < 4) {
+              const fallbacks = [
+                "This concept is fundamental in technical interviews and commonly tested at all levels.",
+                "Understanding this deeply will help you answer follow-up questions confidently.",
+                "Practice applying this in real code examples to solidify your understanding.",
+                "Common interview mistakes include misunderstanding edge cases — always verify your logic.",
+              ];
+              bodyParagraphs.push(fallbacks[bodyParagraphs.length] || fallbacks[0]);
+            }
 
             return (
               <div>
@@ -1202,50 +2108,54 @@ function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, 
                   </h4>
                 </div>
 
-                {/* Bullet points — one per paragraph */}
+                {/* Bullet points — minimum 4 */}
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} className="space-y-2.5">
                   {bodyParagraphs.map((para, pi) => (
                     <li key={pi} className="flex items-start gap-2.5">
                       <span className="shrink-0 rounded-full mt-[6px]"
                         style={{ width: 6, height: 6, background: POINT_COLORS[pi % POINT_COLORS.length], flexShrink: 0 }} />
-                      <p className="text-[12px] leading-[1.6]" style={{ color: C.body, margin: 0 }}>
+                      <p className="text-[12.5px] leading-[1.6]" style={{ color: C.body, margin: 0 }}>
                         {para}
                       </p>
                     </li>
                   ))}
                 </ul>
 
-                {/* Bridging note — only shown when student is transitioning languages */}
-                {question.pythonBridgingNote && primarySkill.toLowerCase() !== "java" && (
+                {/* Transition note (shown for any primary skill) */}
+                {question.javaBridgingNote && primarySkill.toLowerCase().includes("java") && (
+                  <div style={{ marginTop: 16, background: '#f0f9ff', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #0ea5e9' }}>
+                    <p className="text-[10.5px] font-extrabold uppercase tracking-widest" style={{ color: '#0369a1', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <IconLightbulb size={12} color="#0369a1" /> {`If you're coming from ${primarySkill}`}
+                    </p>
+                    <p className="text-[11.5px] font-medium leading-[1.6]" style={{ color: '#4b5563', margin: 0 }}>
+                      {question.javaBridgingNote}
+                    </p>
+                  </div>
+                )}
+                {question.pythonBridgingNote && primarySkill.toLowerCase().includes("python") && (
                   <div style={{ marginTop: 16, background: '#f5f3ff', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #8b5cf6' }}>
                     <p className="text-[10.5px] font-extrabold uppercase tracking-widest" style={{ color: '#7c3aed', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <IconLightbulb size={12} color="#7c3aed" /> {`If you\'re coming from ${primarySkill}`}
+                      <IconLightbulb size={12} color="#7c3aed" /> {`If you're coming from ${primarySkill}`}
                     </p>
                     <p className="text-[11.5px] font-medium leading-[1.6]" style={{ color: '#4b5563', margin: 0 }}>
                       {question.pythonBridgingNote}
                     </p>
                   </div>
                 )}
+                {question.jsBridgingNote && (primarySkill.toLowerCase().includes("javascript") || primarySkill.toLowerCase().includes("frontend") || primarySkill.toLowerCase().includes("react")) && (
+                  <div style={{ marginTop: 16, background: '#fffbeb', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #f59e0b' }}>
+                    <p className="text-[10.5px] font-extrabold uppercase tracking-widest" style={{ color: '#b45309', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <IconLightbulb size={12} color="#f59e0b" /> {`If you're coming from ${primarySkill}`}
+                    </p>
+                    <p className="text-[11.5px] font-medium leading-[1.6]" style={{ color: '#4b5563', margin: 0 }}>
+                      {question.jsBridgingNote}
+                    </p>
+                  </div>
+                )}
+
               </div>
             );
-          })() : (
-            /* Fallback bullet points from explanation */
-            (() => {
-              const points = deriveExplanationPoints(question.explanation);
-              return (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} className="space-y-2.5">
-                  {points.map((item, pi) => (
-                    <li key={pi} className="flex items-start gap-2.5">
-                      <span className="mt-[6px] shrink-0 rounded-full" style={{ width: 6, height: 6, background: item.color }} />
-                      <p className="text-[12px] leading-[1.6]" style={{ color: C.body, margin: 0 }}>
-                        {item.text}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              );
-            })()
-          )}
+          })()}
         </div>
       </div>
 
@@ -1271,8 +2181,8 @@ function QuestionSlide({ question, idx, total, onNext, onPrev, isFirst, isLast, 
         {isLast ? (
           <button onClick={hasQuiz ? onGoToQuiz : onCompleteSection}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-[12px] font-bold text-white transition-all hover:opacity-90"
-            style={{ background: C.navy }}>
-            {hasQuiz ? "Take Quiz" : "Complete Section"} <IconArrowRight size={14} />
+            style={{ background: hasQuiz ? C.purple : C.navy }}>
+            {hasQuiz ? <>Take Quiz <IconArrowRight size={14} /></> : <>Complete Section <IconArrowRight size={14} /></>}
           </button>
         ) : (
           <button onClick={onNext}
@@ -2199,7 +3109,16 @@ export default function StudyPlanPage() {
   const [primarySkill, setPrimarySkill] = useState("General");
   const [activeRole, setActiveRole] = useState("");
   const [availablePlans, setAvailablePlans] = useState<StudyPlanMeta[]>(ALL_PLANS);
+  const [planGenerating, setPlanGenerating] = useState(false);
   const sectionStartRef = useRef<number>(Date.now());
+  const planPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Cleanup plan polling on unmount ─────────────────────────
+  useEffect(() => {
+    return () => {
+      if (planPollRef.current) clearInterval(planPollRef.current);
+    };
+  }, []);
 
   // ── Quiz countdown timer ─────────────────────────────────────
   useEffect(() => {
@@ -2230,6 +3149,16 @@ export default function StudyPlanPage() {
     setPrimarySkill(storedPrimarySkill);
     setActiveRole(storedRole);
 
+    // If primary skill is missing, fetch it from profile
+    if (sid && storedPrimarySkill === "General") {
+      getStudentProfile(sid).then(profile => {
+        if (profile.primary_skill) {
+          setPrimarySkill(profile.primary_skill);
+          sessionStorage.setItem("primary_skill", profile.primary_skill);
+        }
+      }).catch(() => {});
+    }
+
     let currentPlanId = 1; // Default
     if (storedCompany) {
       const matched = ALL_PLANS.find(p => p.company.toLowerCase() === storedCompany.toLowerCase());
@@ -2254,18 +3183,69 @@ export default function StudyPlanPage() {
     }
     setPlanId(currentPlanId);
 
-    // ── New: Fetch actual AI-generated plan from backend ──
+    // ── Fetch AI-generated plan: generate if missing, poll until ready ──
     const storedTargetId = sessionStorage.getItem("target_id");
     if (sid && storedTargetId) {
       const tId = Number(storedTargetId);
       setTargetId(tId);
+
+      const startPolling = (sid: number, tId: number) => {
+        setPlanGenerating(true);
+        if (planPollRef.current) clearInterval(planPollRef.current);
+        planPollRef.current = setInterval(async () => {
+          try {
+            const statusRes = await getPrepStatus(sid, tId);
+            if (statusRes.status === "ready") {
+              // Fetch the plan and verify it has real content
+              const plan = await getLatestPrep(sid, tId);
+              const hasContent = plan.plan_json &&
+                Array.isArray(plan.plan_json.daily_plan) &&
+                plan.plan_json.daily_plan.length > 0;
+
+              if (hasContent) {
+                clearInterval(planPollRef.current!);
+                planPollRef.current = null;
+                setDynamicPlan(plan);
+                setPlanGenerating(false);
+              }
+              // else: status is "ready" but plan_json is still empty — keep polling
+            } else if (statusRes.status === "failed" || statusRes.status === "missing") {
+              // Worker failed or plan missing — stop polling, show error state
+              clearInterval(planPollRef.current!);
+              planPollRef.current = null;
+              setPlanGenerating(false);
+            }
+            // else: still "generating" — keep polling
+          } catch {
+            // ignore transient errors during polling
+          }
+        }, 3000);
+      };
+
       getLatestPrep(sid, tId)
         .then(plan => {
-          console.log("Fetched dynamic AI plan:", plan);
-          setDynamicPlan(plan);
+          // Check if the plan is a stub (empty plan_json from generating state)
+          // or has no daily_plan — if so, start polling instead of showing empty plan
+          const hasContent = plan.plan_json &&
+            Array.isArray(plan.plan_json.daily_plan) &&
+            plan.plan_json.daily_plan.length > 0;
+
+          if (hasContent) {
+            setDynamicPlan(plan);
+            setPlanGenerating(false);
+          } else {
+            // Plan exists but is empty (stub) — it's still generating
+            startPolling(sid, tId);
+          }
         })
-        .catch(err => {
-          console.warn("Could not fetch AI plan (fallback to hardcoded):", err);
+        .catch(async () => {
+          // Plan doesn't exist yet — trigger generation then poll
+          try {
+            await generatePrep(sid);
+          } catch {
+            // generatePrep may return 404/error if already generating — that's fine
+          }
+          startPolling(sid, tId);
         });
     }
 
@@ -2289,26 +3269,10 @@ export default function StudyPlanPage() {
   }, []);
 
   const activePlan = availablePlans.find(p => p.id === selectedPlanId) ?? availablePlans[0];
-  let modules = getModulesForCompany(activePlan.company, primarySkill, activeRole);
-  
-  // Inject Dynamic AI Roadmap as the first module if available
-  if (dynamicPlan && dynamicPlan.plan_json) {
-    const aiModule = {
-      title: "Strategic AI Roadmap",
-      sub: "AI-generated personalized strategy",
-      progress: 0,
-      color: "#8b5cf6", // Purple for AI
-      isAI: true
-    };
-    // Don't duplicate if already injected
-    if (!modules.some(m => m.title === "Strategic AI Roadmap")) {
-      modules = [aiModule, ...modules];
-    }
-  }
-
+  const modules = getModulesForCompany(activePlan.company, primarySkill, activeRole, dynamicPlan);
   const currentModule = modules[selectedModuleIdx];
   const isAIModule = (currentModule as any)?.isAI;
-  const sections = getSections(currentModule?.title || "");
+  const sections = getSections(currentModule?.title || "", dynamicPlan).map(ensureQuiz);
 
   // ── Restore per-section completion when module/plan changes ──
   useEffect(() => {
@@ -2514,6 +3478,11 @@ export default function StudyPlanPage() {
                 <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: C.muted }}>Role</p>
                 <p className="text-[14px] font-bold" style={{ color: C.heading }}>{activePlan.role}</p>
               </div>
+              <div className="w-px h-8" style={{ background: C.border }} />
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: C.muted }}>Your Background</p>
+                <p className="text-[14px] font-bold" style={{ color: C.purple }}>{primarySkill}</p>
+              </div>
             </div>
             {availablePlans.filter(p => !p.expired).map(plan => (
               <button key={plan.id} onClick={() => handleSelectPlan(plan)}
@@ -2548,10 +3517,21 @@ export default function StudyPlanPage() {
 
                 {!isSidebarCollapsed && (
                   <div className="space-y-1.5 w-full">
+                    {/* ── Plan generating banner ── */}
+                    {planGenerating && (
+                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border mb-2"
+                        style={{ borderColor: "#7c3aed33", background: "#f5f3ff" }}>
+                        <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-violet-700 truncate">AI is generating your plan…</p>
+                          <p className="text-[10px] text-violet-400">This takes 30–60 seconds</p>
+                        </div>
+                      </div>
+                    )}
                     {modules.map((mod, idx) => {
                       const isActive = idx === selectedModuleIdx;
                       const isExpanded = !!expandedModules[idx];
-                      const modSections = getSections(mod.title);
+                      const modSections = getSections(mod.title, dynamicPlan);
                       const modProgress = getModuleProgress(idx);
                       const isComplete = modProgress === 100;
 
@@ -2623,16 +3603,140 @@ export default function StudyPlanPage() {
             {/* ═══ CENTER: Content Area — FIXED, NO OUTER SCROLL ═══ */}
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-              {isAIModule && dynamicPlan ? (
-                <AIRoadmapView plan={dynamicPlan} />
-              ) : moduleComplete ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border" style={{ borderColor: C.border, background: C.card }}>
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: C.greenLight }}>
-                    <IconCheck size={28} color={C.green} />
+              {isAIModule && selectedModuleIdx === 0 && planGenerating && !dynamicPlan ? (
+                /* ── Plan generating state ── */
+                <div className="flex flex-col items-center justify-center h-full rounded-2xl border" style={{ borderColor: "#7c3aed33", background: "linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)" }}>
+                  <div className="flex flex-col items-center gap-5 max-w-sm text-center px-8">
+                    <div className="relative">
+                      <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: "rgba(124,58,237,0.12)", border: "2px solid rgba(124,58,237,0.2)" }}>
+                        <IconBook size={32} color="#7c3aed" />
+                      </div>
+                      <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-violet-500 animate-ping opacity-75" />
+                      <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-violet-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-extrabold mb-2" style={{ color: "#4c1d95", fontFamily: "var(--font-playfair), 'Playfair Display', serif" }}>
+                        Generating Your AI Study Plan
+                      </h3>
+                      <p className="text-[13px] leading-relaxed" style={{ color: "#6d28d9" }}>
+                        Our AI is building a personalized day-by-day preparation plan for your interview. This takes 30–60 seconds.
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 items-center">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <div key={i} className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                      ))}
+                    </div>
+                    <p className="text-[11px] font-semibold" style={{ color: "#8b5cf6" }}>
+                      Analyzing your resume, skills, and job description…
+                    </p>
                   </div>
-                  <h3 className="text-xl font-bold mb-2" style={{ color: C.heading }}>Module Complete!</h3>
-                  <p className="text-[13px] mb-6" style={{ color: C.muted }}>You have finished all {sections.length} sections in <strong>{currentModule?.title}</strong>.</p>
-                  <p className="text-[12px]" style={{ color: C.muted }}>Select the next module from the left panel to continue.</p>
+                </div>
+              ) : isAIModule && selectedModuleIdx === 0 && dynamicPlan ? (
+                <AIRoadmapView plan={dynamicPlan} onSelectModule={(idx) => {
+                  setSelectedModuleIdx(idx);
+                  setExpandedModules(prev => ({...prev, [idx]: true}));
+                }} onRegenerate={async () => {
+                  if (!studentId || !targetId) return;
+                  try {
+                    setDynamicPlan(null);
+                    setPlanGenerating(true);
+                    await resetPrepPlan(studentId, targetId);
+                    // Start polling for the new plan
+                    if (planPollRef.current) clearInterval(planPollRef.current);
+                    planPollRef.current = setInterval(async () => {
+                      try {
+                        const statusRes = await getPrepStatus(studentId, targetId);
+                        if (statusRes.status === "ready") {
+                          clearInterval(planPollRef.current!);
+                          planPollRef.current = null;
+                          const plan = await getLatestPrep(studentId, targetId);
+                          setDynamicPlan(plan);
+                          setPlanGenerating(false);
+                        } else if (statusRes.status === "failed") {
+                          clearInterval(planPollRef.current!);
+                          planPollRef.current = null;
+                          setPlanGenerating(false);
+                        }
+                      } catch { /* ignore transient errors */ }
+                    }, 3000);
+                  } catch (e) {
+                    console.error("Regenerate failed:", e);
+                    setPlanGenerating(false);
+                  }
+                }} />
+              ) : moduleComplete ? (
+                <div className="flex flex-col items-center justify-center h-full text-center rounded-2xl border p-10" style={{ borderColor: C.border, background: C.card }}>
+                  {/* Success animation ring */}
+                  <div className="relative mb-6">
+                    <div className="w-24 h-24 rounded-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${C.greenLight} 0%, #bbf7d0 100%)`, border: `3px solid ${C.green}` }}>
+                      <IconCheck size={40} color={C.green} />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: C.purple }}>
+                      {sections.length}/{sections.length}
+                    </div>
+                  </div>
+
+                  <h3 className="text-2xl font-extrabold mb-2" style={{ color: C.heading, fontFamily: "var(--font-playfair), 'Playfair Display', serif" }}>
+                    Module Complete!
+                  </h3>
+                  <p className="text-[13px] mb-1" style={{ color: C.muted }}>
+                    You finished all <strong style={{ color: C.green }}>{sections.length} sections</strong> in
+                  </p>
+                  <p className="text-[15px] font-bold mb-6" style={{ color: C.heading }}>{currentModule?.title}</p>
+
+                  {/* Stats row */}
+                  <div className="flex gap-4 mb-8">
+                    <div className="px-4 py-3 rounded-xl border text-center" style={{ borderColor: C.border, background: C.surface }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: C.muted }}>Sections</p>
+                      <p className="text-lg font-extrabold" style={{ color: C.green }}>{sections.length}</p>
+                    </div>
+                    <div className="px-4 py-3 rounded-xl border text-center" style={{ borderColor: C.border, background: C.surface }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: C.muted }}>Progress</p>
+                      <p className="text-lg font-extrabold" style={{ color: C.purple }}>100%</p>
+                    </div>
+                    <div className="px-4 py-3 rounded-xl border text-center" style={{ borderColor: C.border, background: C.surface }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: C.muted }}>Questions</p>
+                      <p className="text-lg font-extrabold" style={{ color: C.navy }}>{sections.reduce((s, sec) => s + (sec.questions?.length || 0), 0)}</p>
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col gap-3 w-full max-w-[280px]">
+                    {/* Relearn button */}
+                    <button
+                      onClick={() => {
+                        // Reset all section progress for this module (keep global pass set intact)
+                        const restored = sections.map(() => false);
+                        setCompletedSections(restored);
+                        setCurrentSectionIdx(0);
+                        setSlideIdx(0);
+                        setSlideDirection("right");
+                        setQuizSlideIdx(0);
+                        setQuizState('none');
+                        setQuizAnswers({});
+                        setQuizAnsweredIdx(-1);
+                        setSkippedQuestions(new Set());
+                        setTimeLeft(null);
+                        setModuleComplete(false);
+                        // Scroll to top of section
+                        sectionStartRef.current = Date.now();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[13px] font-bold transition-all hover:opacity-90 hover:shadow-md"
+                      style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.purple} 100%)`, color: '#fff' }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                      </svg>
+                      Relearn Module
+                    </button>
+
+                    {/* Next module hint */}
+                    <p className="text-[11px] font-medium" style={{ color: C.muted }}>
+                      Or select the next module from the left panel to continue →
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -2662,18 +3766,40 @@ export default function StudyPlanPage() {
                         {/* Q&A Slides */}
                         {(() => {
                           const introOffset = hasIntro ? 1 : 0;
+                          
+                          // ── Filter questions based on student background ──
+                          const sk = primarySkill.toLowerCase();
+                          const isJavaSource = sk.includes("java");
+                          const isPythonSource = sk.includes("python");
+                          const isTargetPython = currentSection?.title.toLowerCase().includes("python") || currentModule?.title.toLowerCase().includes("python");
+                          const isTargetJava = currentSection?.title.toLowerCase().includes("java") || currentModule?.title.toLowerCase().includes("java");
+                          
+                          const allQuestions = currentSection?.questions || [];
+                          const displayQuestions = allQuestions.filter(q => {
+                            // If it's a transition-only question, only show if student is transitioning
+                            if (q.isTransitionOnly) {
+                              if (isTargetPython && !isJavaSource) return false;
+                              if (isTargetJava && !isPythonSource) return false;
+                            }
+                            return true;
+                          });
+
                           const questionIdx = slideIdx - introOffset;
-                          return !isCodingSection && slideIdx >= introOffset && questionIdx < qLen && currentSection?.questions[questionIdx] && (
+                          const currentQ = displayQuestions[questionIdx];
+                          const qCount = displayQuestions.length;
+                          const effectiveTotalQs = qCount + introOffset;
+
+                          return !isCodingSection && slideIdx >= introOffset && questionIdx < qCount && currentQ && (
                             <QuestionSlide
                               key={`q-${currentSectionIdx}-${questionIdx}`}
-                              question={currentSection.questions[questionIdx]}
+                              question={currentQ}
                               idx={slideIdx}
-                              total={totalQs}
+                              total={effectiveTotalQs}
                               onNext={goToNextSlide}
                               onPrev={goToPrevSlide}
                               isFirst={slideIdx === 0}
-                              isLast={slideIdx === totalQs - 1}
-                              hasQuiz={(currentSection?.quiz?.length || 0) > 0}
+                              isLast={slideIdx === effectiveTotalQs - 1}
+                              hasQuiz={(currentSection?.questions?.length || 0) > 0}
                               onGoToQuiz={handleStartQuiz}
                               onCompleteSection={handleProceed}
                               direction={slideDirection}
@@ -2734,9 +3860,9 @@ export default function StudyPlanPage() {
                             </div>
                             {quizPassed && (
                               <button onClick={handleProceed}
-                                className="px-4 py-1.5 rounded-lg font-bold text-[11px] text-white transition-all hover:opacity-90 inline-flex items-center gap-1.5"
-                                style={{ background: C.navy }}>
-                                {currentSectionIdx < sections.length - 1 ? "Next Section" : "Complete Module"} <IconArrowRight size={12} />
+                                className="px-5 py-2 rounded-lg font-bold text-[12px] text-white transition-all hover:opacity-90 inline-flex items-center gap-1.5"
+                                style={{ background: C.green }}>
+                                Complete Section <IconArrowRight size={13} />
                               </button>
                             )}
                           </div>

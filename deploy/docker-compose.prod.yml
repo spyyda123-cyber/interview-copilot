@@ -1,0 +1,169 @@
+##############################################################
+# PRODUCTION DOCKER COMPOSE — Interview Copilot
+# Runs all services: DB, Redis, 3 APIs, 3 Celery workers, Nginx
+##############################################################
+
+version: '3.8'
+
+# Shared environment variables for all backend services
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/interview_copilot
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  OPENAI_GENERATION_MODEL: ${OPENAI_GENERATION_MODEL:-gpt-4o}
+  OPENAI_FALLBACK_MODEL: ${OPENAI_FALLBACK_MODEL:-gpt-4o-mini}
+  GEMINI_API_KEY: ${GEMINI_API_KEY}
+  GEMINI_GENERATION_MODEL: ${GEMINI_GENERATION_MODEL:-models/gemini-1.5-flash}
+  GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-models/text-embedding-004}
+  USE_S3_STORAGE: ${USE_S3_STORAGE:-true}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-interview-copilot-files}
+  AWS_S3_REGION: ${AWS_S3_REGION:-ap-south-1}
+  ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_HOURS: 8
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  UPLOAD_DIR: storage/resumes
+  KNOWLEDGE_DIR: storage/knowledge
+  ENV: production
+
+services:
+  # ─────────────────────────────────────────────────────────
+  # 1. INFRASTRUCTURE
+  # ─────────────────────────────────────────────────────────
+  db:
+    image: ankane/pgvector:v0.5.1
+    container_name: copilot_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: interview_copilot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Do NOT expose port 5432 to the internet in production
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: copilot_redis
+    restart: always
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────
+  # 2. BACKEND APIs
+  # ─────────────────────────────────────────────────────────
+  student-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+      args:
+        BACKEND_DIR: student/backend
+    container_name: copilot_student_api
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8010:8000"
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  admin-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+      args:
+        BACKEND_DIR: admin/backend
+    container_name: copilot_admin_api
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8020:8000"
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  super-admin-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+      args:
+        BACKEND_DIR: super-admin/backend
+    container_name: copilot_super_admin_api
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8030:8000"
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────
+  # 3. CELERY WORKERS (Background AI tasks)
+  # ─────────────────────────────────────────────────────────
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+      args:
+        BACKEND_DIR: student/backend
+    container_name: copilot_celery_worker
+    restart: always
+    environment:
+      <<: *backend-env
+    # Windows-compatible: --pool=solo. On Linux EC2 use --pool=prefork
+    command: ["python", "-m", "celery", "-A", "app.tasks.celery_app", "worker",
+              "--loglevel=info", "--pool=prefork", "--concurrency=2",
+              "--queues", "default,llm,agent"]
+    depends_on:
+      - redis
+      - db
+
+  # ─────────────────────────────────────────────────────────
+  # 4. NGINX REVERSE PROXY (optional — direct port access works too)
+  # ─────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: copilot_nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - student-api
+      - admin-api
+      - super-admin-api
+
+volumes:
+  postgres_data:

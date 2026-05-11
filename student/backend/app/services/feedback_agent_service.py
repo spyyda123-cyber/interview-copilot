@@ -120,38 +120,45 @@ def _call_gemini_flash(prompt: str) -> Optional[str]:
     api_key = getattr(settings, "GEMINI_API_KEY", "").strip()
     if not api_key:
         logger.warning("[FEEDBACK-AGENT] GEMINI_API_KEY not set — using SQL-only mode")
-        return None
+        return None, None
 
     model_name = _resolve_feedback_model()
     if not model_name:
         logger.warning("[FEEDBACK-AGENT] No Gemini model available — using SQL-only mode")
-        return None
+        return None, None
 
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
 
         def _call():
-            return model.generate_content(
+            response = model.generate_content(
                 prompt,
                 generation_config={"temperature": 0.1, "max_output_tokens": 1024},
-            ).text
+            )
+            usage = {
+                "prompt_tokens": response.usage_metadata.prompt_token_count,
+                "completion_tokens": response.usage_metadata.candidates_token_count,
+                "total_tokens": response.usage_metadata.total_token_count,
+                "model": model_name
+            }
+            return response.text, usage
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_call)
-            result = future.result(timeout=_FEEDBACK_TIMEOUT_SECONDS)
+            result, usage = future.result(timeout=_FEEDBACK_TIMEOUT_SECONDS)
             logger.info(
                 "[FEEDBACK-AGENT] Gemini call succeeded via %s (%d chars)",
                 model_name, len(result),
             )
-            return result.strip()
+            return result.strip(), usage
 
     except concurrent.futures.TimeoutError:
         logger.warning(
             "[FEEDBACK-AGENT] Gemini timed out after %ds — using SQL-only mode",
             _FEEDBACK_TIMEOUT_SECONDS,
         )
-        return None
+        return None, None
     except Exception as exc:
         err = str(exc).lower()
         if "quota" in err or "429" in err or "resource_exhausted" in err:
@@ -165,7 +172,7 @@ def _call_gemini_flash(prompt: str) -> Optional[str]:
             logger.warning(
                 "[FEEDBACK-AGENT] Gemini call failed (%s) — using SQL-only mode", exc
             )
-        return None
+        return None, None
 
 
 # ─── SQL Aggregations (no LLM cost) ───────────────────────────────────────────
@@ -230,7 +237,7 @@ def _compute_feedback_hash(feedback_ids: list[int]) -> str:
 
 # ─── Gemini Flash NLP Topic Extraction ────────────────────────────────────────
 
-def _extract_topics_with_gemini(company_name: str, obq_texts: list[str]) -> list[dict]:
+def _extract_topics_with_gemini(company_name: str, obq_texts: list[str]) -> tuple[list[dict], Optional[dict]]:
     """
     Use Gemini 1.5 Flash to extract structured interview topics from free-text feedback.
 
@@ -246,7 +253,7 @@ def _extract_topics_with_gemini(company_name: str, obq_texts: list[str]) -> list
     """
     if not obq_texts:
         logger.info("[FEEDBACK-AGENT] No OBQ texts for %s — skipping Gemini call", company_name)
-        return []
+        return [], None
 
     # Cap at 20 to stay in free tier limits (~200-400 tokens input)
     capped_texts = obq_texts[:20]
@@ -280,11 +287,11 @@ Rules:
         "[FEEDBACK-AGENT] Calling Gemini Flash for topic extraction — company=%s, n_texts=%d",
         company_name, len(capped_texts),
     )
-    raw = _call_gemini_flash(prompt)
+    raw, usage = _call_gemini_flash(prompt)
 
     if not raw:
         logger.info("[FEEDBACK-AGENT] Gemini returned no response for %s", company_name)
-        return []
+        return [], usage
 
     # Parse JSON safely — handle markdown fences Gemini sometimes adds
     try:
@@ -299,7 +306,7 @@ Rules:
 
         if not isinstance(topics, list):
             logger.warning("[FEEDBACK-AGENT] Gemini returned non-list JSON for %s", company_name)
-            return []
+            return [], usage
 
         # Validate and filter each topic object
         valid_categories = {
@@ -324,14 +331,14 @@ Rules:
             "[FEEDBACK-AGENT] Extracted %d valid topics for %s via Gemini Flash",
             len(validated), company_name,
         )
-        return validated
+        return validated, usage
 
     except (json.JSONDecodeError, ValueError) as exc:
         logger.warning(
             "[FEEDBACK-AGENT] Failed to parse Gemini topic JSON for %s: %s | raw_sample=%s",
             company_name, exc, raw[:300],
         )
-        return []
+        return [], usage
 
 
 # ─── Prompt Snippet Builder ────────────────────────────────────────────────────
@@ -436,7 +443,23 @@ def refresh_company_analysis(db: Session, company_name: str) -> bool:
         return False
 
     # Step 3 – Gemini Flash topic extraction (1 call per company)
-    topics = _extract_topics_with_gemini(company_name, metrics["obq_texts"])
+    topics, usage = _extract_topics_with_gemini(company_name, metrics["obq_texts"])
+
+    # Record usage if available
+    if usage:
+        try:
+            from app.services.usage_service import record_llm_usage
+            record_llm_usage(
+                db=db,
+                provider="gemini",
+                model=usage["model"],
+                action="feedback_analysis",
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+                student_id=None # Batch analysis, not specific to one student's session
+            )
+        except Exception as usage_exc:
+            logger.warning("[FEEDBACK-USAGE] Failed to record usage: %s", usage_exc)
 
     # Step 4 – Build prompt snippet
     snippet = _build_prompt_snippet(company_name, metrics, topics)

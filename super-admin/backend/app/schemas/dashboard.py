@@ -23,4 +23,6 @@ class DashboardSummaryResponse(BaseModel):
     active_colleges: int
     total_tokens_issued: int
     total_tokens_consumed: int
+    total_llm_tokens: int
+    total_llm_cost_usd: float
     recent_activity: list[DashboardActivityItem]
