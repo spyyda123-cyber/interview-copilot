@@ -432,10 +432,14 @@ def generate_plan_task(
         )
 
         _profile = db.query(StudentProfile).filter(StudentProfile.student_id == student_id).first()
+        _gap = db.query(ResumeGapAnalysis).filter(ResumeGapAnalysis.student_id == student_id).order_by(ResumeGapAnalysis.created_at.desc()).first()
         fallback_plan_data = _generate_fallback_plan(
             days_available,
             role=role,
             primary_skill=_profile.primary_skill if _profile else None,
+            company_name=company_name,
+            support_mode=_profile.support_mode if _profile else "Guided",
+            missing_skills=_gap.missing_skills if _gap else [],
         )
         logger.info("[PLAN-FALLBACK] Fallback plan created with %d days", days_available)
 

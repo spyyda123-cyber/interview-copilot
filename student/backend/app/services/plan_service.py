@@ -370,15 +370,29 @@ def _generate_skeleton_plan(
     }
 
 
-def _generate_fallback_plan(days_available: int, role: str | None = None, primary_skill: str | None = None) -> dict:
+def _generate_fallback_plan(
+    days_available: int,
+    role: str | None = None,
+    primary_skill: str | None = None,
+    company_name: str | None = None,
+    support_mode: str | None = None,
+    missing_skills: list | None = None,
+) -> dict:
     """Generate deterministic fallback plan without LLM.
 
-    Now role-aware: detects target language from role and student's primary skill
-    to generate the correct technology stack (Python/Django vs Java/Spring vs Node.js etc.)
-    and applies cross-language bridging notes when student skill ≠ target language.
+    Uses all 6 key features:
+    - Company: referenced in behavioral tasks and overview
+    - Role: determines technology stack (Python/Java/JS)
+    - Skill Proficiency: cross-language bridging notes on Day 1-2
+    - Time Left: days_available determines plan length
+    - Job Description: missing_skills prioritized in Day 1-2
+    - Type of Mentor: support_mode affects task style
     """
     role_lower = (role or "").lower()
     skill_lower = (primary_skill or "").lower()
+    company = company_name or "the target company"
+    mode = (support_mode or "Guided").lower()
+    gaps = missing_skills or []
 
     # ── Detect target language from role ──────────────────────────────────
     is_python_role = any(k in role_lower for k in ["python", "django", "fastapi", "flask", "data scientist", "ml engineer", "data engineer"])
@@ -452,8 +466,8 @@ def _generate_fallback_plan(days_available: int, role: str | None = None, primar
     # ── Behavioral Interview tasks (last day) ──────────────────────────────
     behavioral_tasks = [
         {
-            "title": "Tell Me About Yourself & Company Research",
-            "description": "Practice your self-introduction using Present → Past → Future structure. Research the company's tech stack, products, and culture. Prepare a 60-90 second pitch.",
+            "title": f"Tell Me About Yourself & Why {company}",
+            "description": f"Practice your self-introduction using Present → Past → Future structure. Research {company}'s tech stack, products, and culture. Prepare a 60-90 second pitch that connects your {primary_skill or 'background'} to the {role or 'role'} at {company}.",
             "duration_minutes": 45,
             "task_type": "qa",
             "qa_pairs": [
@@ -464,9 +478,9 @@ def _generate_fallback_plan(days_available: int, role: str | None = None, primar
                     "transition_note": None
                 },
                 {
-                    "question": "Why do you want to work at this company?",
-                    "answer": "Research the company. Connect your skills to their mission. Show genuine enthusiasm.",
-                    "explanation": "Demonstrating Genuine Interest\n\nGeneric answers like 'it's a great company' instantly signal you haven't researched the organisation. The best answers connect three things: the company's work, your skills, and your career goals.\n\nResearch deeply before the interview: visit their engineering blog, read recent press releases, check their GitHub, note their tech stack from job descriptions.\n\nStructure in three parts: (1) What specifically attracts you, (2) How your skills align, (3) What you hope to grow into.\n\nAvoid mentioning salary, brand name, or convenience as primary motivators.",
+                    "question": f"Why do you want to work at {company}?",
+                    "answer": f"Research {company} specifically. Connect your {primary_skill or 'skills'} to their mission. Show genuine enthusiasm for the {role or 'role'}.",
+                    "explanation": f"Demonstrating Genuine Interest in {company}\n\nGeneric answers like 'it's a great company' instantly signal you haven't researched the organisation. The best answers connect three things: {company}'s work, your skills, and your career goals.\n\nResearch deeply before the interview: visit their engineering blog, read recent press releases, check their GitHub, note their tech stack from job descriptions.\n\nStructure in three parts: (1) What specifically attracts you to {company}, (2) How your {primary_skill or 'skills'} align with their needs, (3) What you hope to grow into there.\n\nAvoid mentioning salary, brand name, or convenience as primary motivators.",
                     "transition_note": None
                 },
             ],
@@ -945,7 +959,7 @@ def _generate_fallback_plan(days_available: int, role: str | None = None, primar
 
         tasks.append({
             "title": f"DSA: {dsa_topic}",
-            "description": f"Master {dsa_topic} concepts and problem-solving patterns for technical interviews.",
+            "description": f"Master {dsa_topic} concepts and problem-solving patterns for the {role or 'technical'} interview at {company}." + (f" This is a priority gap skill." if dsa_topic.lower() in [g.lower() for g in gaps] else ""),
             "duration_minutes": 60 if day_num % 2 == 0 else 45,
             "task_type": "qa",
             "qa_pairs": qa_pairs_for_dsa,
@@ -1068,7 +1082,7 @@ def _generate_fallback_plan(days_available: int, role: str | None = None, primar
 
         tasks.append({
             "title": f"Backend: {java_topic}",
-            "description": f"Master {java_topic} concepts for backend development interviews.",
+            "description": f"Master {java_topic} concepts for the {role or 'backend'} interview at {company}." + (f" PRIORITY: This is a missing skill from your gap analysis." if java_topic.lower() in [g.lower() for g in gaps] else "") + (f" [Mentor: {support_mode} mode — {'step-by-step explanations included' if 'guided' in mode else 'concise tasks' if 'self' in mode else 'adaptive to your gaps'}]" if support_mode else ""),
             "duration_minutes": 75 if day_num % 3 == 0 else 60,
             "task_type": "qa",
             "qa_pairs": qa_pairs_for_java,
@@ -1152,14 +1166,22 @@ def _generate_fallback_plan(days_available: int, role: str | None = None, primar
             "tasks": tasks
         })
 
+    # Build overview using all 6 features
+    gap_note = f" Priority gaps: {', '.join(gaps[:3])}." if gaps else ""
+    mode_note = f" Mentor style: {support_mode}." if support_mode else ""
+    overview = (
+        f"Personalized {days_to_plan}-day {role or 'interview'} preparation plan for {company}. "
+        f"Focus: {framework_label} fundamentals, DSA, System Design, Coding Mock Tests, and Behavioral Interview.{gap_note}{mode_note}"
+    )
+
     return {
-        "overview": f"Fallback {days_to_plan}-day Java/Spring interview preparation plan. Focus: DSA + Backend + System Design + Coding Mock Tests + Behavioral Interview.",
+        "overview": overview,
         "daily_plan": daily_plan,
         "resources": [
+            f"{framework_label} documentation",
             "LeetCode (DSA practice)",
-            "Spring Boot documentation",
             "System Design Interview resources",
-            "Mock interview platform"
+            f"Mock interview platform — practice 'Why {company}?' and STAR stories"
         ]
     }
 
