@@ -264,10 +264,14 @@ function Screen0Foundation({
   const foundationTopics = profileSkillTopics;
   const weakAreas = dynamicPlan?.plan_json?.weak_areas ?? [];
 
-  // Compute avg mastery from proficiency tags
+  // profToMastery kept for progress bar color selection only (not for displaying numbers)
   const profToMastery = (tag: string) => tag === "advanced" ? 80 : tag === "intermediate" ? 50 : 15;
+
+  // avgMastery: count how many foundation topics the student actually COMPLETED (each = 100%)
+  // NEVER use proficiency_tag as a mastery number — that is the student's baseline, not their progress
+  const completedCount = foundationTopics.filter(t => getTopicProgress(t.id) === "completed").length;
   const avgMastery = foundationTopics.length > 0
-    ? Math.round(foundationTopics.reduce((s, t) => s + profToMastery(t.proficiency_tag), 0) / foundationTopics.length)
+    ? Math.round((completedCount / foundationTopics.length) * 100)
     : 0;
 
   const foundationQuizQuestions = [
@@ -332,26 +336,44 @@ function Screen0Foundation({
         )}
       </div>
 
-      {/* Summary banner */}
-      <div style={{ background: C.greenBg, border: `1px solid ${C.greenLight}`, borderRadius: 14, padding: "18px 22px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: C.greenBg, border: `2px solid ${C.greenLight}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {Ico.check(18, C.greenLight)}
-        </div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>
-            Phase 1 Complete &mdash; {foundationTopics.length > 0 ? `${foundationTopics.length} topics assessed` : "Baseline assessment done"}
+      {/* Summary banner — only show Phase 1 Complete after quiz is actually done */}
+      {(() => {
+        const quizDone = typeof window !== "undefined" && studentId
+          ? localStorage.getItem(`foundation_quiz_done_${studentId}`) === "true"
+          : false;
+        return quizDone ? (
+          <div style={{ background: C.greenBg, border: `1px solid ${C.greenLight}`, borderRadius: 14, padding: "18px 22px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: C.greenBg, border: `2px solid ${C.greenLight}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {Ico.check(18, C.greenLight)}
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>
+                Phase 1 Complete &mdash; {foundationTopics.length > 0 ? `${foundationTopics.length} topics assessed` : "Baseline assessment done"}
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>
+                {foundationTopics.length > 0
+                  ? `Your existing skills: ${foundationTopics.map(t => t.title).slice(0, 4).join(", ")}${foundationTopics.length > 4 ? ` +${foundationTopics.length - 4} more` : ""}`
+                  : "Skills assessed against the target JD requirements."}
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
+              {foundationTopics.length > 0 && <Badge label={`${foundationTopics.length} Topics`} color={C.purpleLight} bg={C.purpleDim} />}
+              <Badge label="Phase 1 &#10003;" color={C.greenLight} bg={C.greenBg} />
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: C.textMuted }}>
-            {foundationTopics.length > 0
-              ? `Your existing skills: ${foundationTopics.map(t => t.title).slice(0, 4).join(", ")}${foundationTopics.length > 4 ? ` +${foundationTopics.length - 4} more` : ""}`
-              : "Skills assessed against the target JD requirements."}
+        ) : (
+          <div style={{ background: C.purpleBg, border: `1px solid ${C.purpleDim}`, borderRadius: 14, padding: "16px 22px", marginBottom: 28, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: C.purpleDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>📚</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>Foundation Phase — In Progress</div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>Review your existing skills below and complete the Foundation Quiz to finish Phase 1.</div>
+            </div>
+            <div style={{ marginLeft: "auto" }}>
+              <Badge label="Not Complete" color={C.amber} bg={C.amberBg} />
+            </div>
           </div>
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexShrink: 0 }}>
-          {foundationTopics.length > 0 && <Badge label={`${foundationTopics.length} Topics`} color={C.purpleLight} bg={C.purpleDim} />}
-          <Badge label="Phase 1 &#10003;" color={C.greenLight} bg={C.greenBg} />
-        </div>
-      </div>
+        );
+      })()}
 
       {/* AI-derived topic grid &mdash; topics student already has some proficiency in */}
       {foundationTopics.length > 0 ? (
@@ -359,10 +381,10 @@ function Screen0Foundation({
           <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 16px" }}>Your Existing Skills</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 32 }}>
             {foundationTopics.map((topic, i) => {
-              const baseMastery = profToMastery(topic.proficiency_tag);
               const progress = getTopicProgress(topic.id);
-              // Real mastery: completed = 100%, started = base mastery, not_started = base mastery
-              const displayMastery = progress === "completed" ? 100 : baseMastery;
+              // Real mastery: ONLY from actual topic completion — never from proficiency_tag
+              // proficiency_tag tells us the student's STARTING level, not their completion
+              const displayMastery = progress === "completed" ? 100 : 0;
               const isCompleted = progress === "completed";
               const isStarted = progress === "started";
               return (
@@ -535,6 +557,11 @@ function Screen1PrepPlan({
   };
 
   // Build topic cards from high_roi_topic_ids (new format) or daily_plan (legacy)
+  // PROGRESS RULES:
+  //   status="queued"      → student has never opened this topic (no localStorage key)
+  //   status="in-progress" → student opened it AND has actual task completion % stored
+  //   status="completed"   → student explicitly completed all tasks
+  //   progress %           → ONLY from coding_pct stored on actual submission, never from proficiency_tag
   const topicCards = isNewFormat
     ? (() => {
         const allTopics = curriculum.flatMap(cat => cat.topics);
@@ -542,14 +569,31 @@ function Screen1PrepPlan({
           ? highRoiIds.map(id => allTopics.find(t => t.id === id)).filter(Boolean) as typeof allTopics
           : allTopics.filter(t => t.roi_label === "high").slice(0, 4);
         return highRoiTopics.slice(0, 4).map((topic) => {
-          const progress = getTopicProgress(topic.id);
-          const key = `coding_pct_${studentId}_${topic.id}`;
-          const storedPct = (typeof window !== "undefined" && studentId) ? localStorage.getItem(key) : null;
-          const progressPct = progress === "completed" ? 100 : (storedPct ? parseInt(storedPct) : (progress === "started" ? 40 : 0));
+          const trackingProgress = getTopicProgress(topic.id);
+          // Only read actual coding task completion — never fake a number
+          const codingPctRaw = (typeof window !== "undefined" && studentId)
+            ? localStorage.getItem(`coding_pct_${studentId}_${topic.id}`)
+            : null;
+          const tasksPctRaw = (typeof window !== "undefined" && studentId)
+            ? localStorage.getItem(`tasks_pct_${studentId}_${topic.id}`)
+            : null;
+          const actualPct = trackingProgress === "completed"
+            ? 100
+            : codingPctRaw
+              ? parseInt(codingPctRaw, 10)
+              : tasksPctRaw
+                ? parseInt(tasksPctRaw, 10)
+                : 0;
+          // Status derived strictly from actual activity — never from proficiency_tag
+          const cardStatus: "completed" | "in-progress" | "queued" =
+            trackingProgress === "completed" ? "completed" :
+            trackingProgress === "started" && actualPct > 0 ? "in-progress" :
+            trackingProgress === "started" ? "in-progress" :
+            "queued";
           return {
             title: topic.title,
-            status: progress === "completed" ? "completed" : (progress === "started" || storedPct ? "in-progress" : "queued"),
-            progress: progressPct,
+            status: cardStatus,
+            progress: actualPct,
             day: 1,
             tasks: [] as LearningTask[],
             allQuizQuestions: [] as Array<{question: string; options: string[]; correct_index: number; explanation: string}>,
@@ -560,18 +604,28 @@ function Screen1PrepPlan({
           };
         });
       })()
-    : dailyPlan.slice(0, 4).map((day, i) => ({
-        title: day.focus,
-        status: i === 0 ? "in-progress" : "queued",
-        progress: i === 0 ? 45 : 0,
-        day: day.day,
-        tasks: day.tasks,
-        allQuizQuestions: day.tasks.flatMap(t => t.quiz ?? []),
-        topicId: day.focus.toLowerCase().replace(/\s+/g, "-"),
-        description: "",
-        difficulty: "medium" as const,
-        subTopics: [] as Array<{id: string; title: string}>,
-      }));
+    : dailyPlan.slice(0, 4).map((day) => {
+        // Legacy format: derive real progress from localStorage too
+        const legacyId = day.focus.toLowerCase().replace(/\s+/g, "-");
+        const trackProg = getTopicProgress(legacyId);
+        const codingRaw = (typeof window !== "undefined" && studentId)
+          ? localStorage.getItem(`coding_pct_${studentId}_${legacyId}`) : null;
+        const actualPct = trackProg === "completed" ? 100 : codingRaw ? parseInt(codingRaw, 10) : 0;
+        const cardSt: "completed" | "in-progress" | "queued" =
+          trackProg === "completed" ? "completed" : trackProg === "started" ? "in-progress" : "queued";
+        return {
+          title: day.focus,
+          status: cardSt,
+          progress: actualPct,
+          day: day.day,
+          tasks: day.tasks,
+          allQuizQuestions: day.tasks.flatMap(t => t.quiz ?? []),
+          topicId: legacyId,
+          description: "",
+          difficulty: "medium" as const,
+          subTopics: [] as Array<{id: string; title: string}>,
+        };
+      });
 
   return (
     <div className="sp-fade-up" style={{ maxWidth: 860, margin: "0 auto" }}>
@@ -2572,25 +2626,30 @@ export default function StudyPlanPage() {
   const [company, setCompany] = useState("Google");
   const [role, setRole] = useState("Senior L5 Backend");
 
-  // -- Topic progress tracking (localStorage) --
+  // -- Topic progress tracking (localStorage) — reactive via progressVersion --
+  const [progressVersion, setProgressVersion] = useState(0);
+
   const markTopicStarted = useCallback((topicId: string) => {
     if (!studentId || !topicId) return;
     const key = `topic_progress_${studentId}_${topicId}`;
     if (!localStorage.getItem(key)) {
       localStorage.setItem(key, "started");
+      setProgressVersion(v => v + 1);
     }
   }, [studentId]);
 
   const markTopicCompleted = useCallback((topicId: string) => {
     if (!studentId || !topicId) return;
     localStorage.setItem(`topic_progress_${studentId}_${topicId}`, "completed");
+    setProgressVersion(v => v + 1);
   }, [studentId]);
 
   const getTopicProgress = useCallback((topicId: string): "not_started" | "started" | "completed" => {
     if (!studentId || !topicId) return "not_started";
     const val = localStorage.getItem(`topic_progress_${studentId}_${topicId}`);
-    return (val as any) ?? "not_started";
-  }, [studentId]);
+    return (val as "not_started" | "started" | "completed") ?? "not_started";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId, progressVersion]);
 
   // -- Plan state --
   const [dynamicPlan, setDynamicPlan] = useState<PlanDetailResponse | null>(null);

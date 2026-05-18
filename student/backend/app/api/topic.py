@@ -96,10 +96,11 @@ def _generate_topic_content(
     coding_required: bool,
     student_known_skills: list,
 ) -> dict:
-    """Generate topic content via Gemini 2.5 Pro (new SDK) with 1.5 Flash fallback (old SDK).
+    """Generate topic content via Gemini (new SDK v1 API) with multi-tier fallback.
 
-    Primary:  gemini-2.5-pro-preview  — via google-genai (v1 API)
-    Fallback: gemini-1.5-flash-002    — via google-generativeai (v1beta API)
+    Tier 1 (Primary):  GEMINI_GENERATION_MODEL env var (default: gemini-2.5-pro) — new SDK v1
+    Tier 2 (Fallback): GEMINI_FALLBACK_MODEL env var (default: gemini-2.5-flash) — new SDK v1
+    Tier 3 (Safety):   gemini-1.5-flash — old SDK v1beta (maximum compatibility)
     """
     import concurrent.futures
     from app.core.config import settings
@@ -127,7 +128,11 @@ def _generate_topic_content(
         raise RuntimeError("GEMINI_API_KEY is not set — add it to .env.prod")
 
     primary_model = getattr(settings, "GEMINI_GENERATION_MODEL", "gemini-2.5-pro")
-    fallback_model = getattr(settings, "GEMINI_FALLBACK_MODEL", "models/gemini-2.5-flash")
+    fallback_model = getattr(settings, "GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+
+    # Normalise model names: strip "models/" prefix for new SDK (it uses bare names)
+    def _normalise_for_new_sdk(name: str) -> str:
+        return name.removeprefix("models/")
 
     def _parse_raw(raw: str) -> dict:
         """Strip markdown fences and parse JSON."""
@@ -137,15 +142,16 @@ def _generate_topic_content(
             stripped = stripped.rsplit("```", 1)[0].strip()
         return json.loads(stripped)
 
-    # ── Primary: Gemini 2.5 Pro via new google-genai SDK (v1 API) ──────────
+    # ── New SDK (google-genai, v1 API) — used for primary and fallback ────────
     def _call_new_sdk(model_name: str) -> dict:
         from google import genai as new_genai
         from google.genai import types as genai_types
 
+        normalised = _normalise_for_new_sdk(model_name)
         client = new_genai.Client(api_key=gemini_api_key)
-        logger.info("[TOPIC] Calling Gemini 2.5 (new SDK) model=%s topic=%s", model_name, topic_id)
+        logger.info("[TOPIC] Calling Gemini (new SDK) model=%s topic=%s", normalised, topic_id)
         response = client.models.generate_content(
-            model=model_name,
+            model=normalised,
             contents=full_prompt,
             config=genai_types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -154,23 +160,24 @@ def _generate_topic_content(
             ),
         )
         raw = response.text or "{}"
-        logger.info("[TOPIC] Raw response length=%d model=%s", len(raw), model_name)
+        logger.info("[TOPIC] Raw response length=%d model=%s", len(raw), normalised)
         parsed = _parse_raw(raw)
         logger.info("[TOPIC] Parsed keys=%s", list(parsed.keys())[:10])
         return parsed
 
-    # ── Fallback: Gemini 1.5 via old google-generativeai SDK (v1beta) ──────
-    def _call_old_sdk(model_name: str) -> dict:
+    # ── Old SDK (google-generativeai, v1beta) — safety net for gemini-1.5-flash ──
+    def _call_old_sdk_flash() -> dict:
         import google.generativeai as genai_old
 
+        model_name = "gemini-1.5-flash"
         genai_old.configure(api_key=gemini_api_key)
-        logger.info("[TOPIC] Calling Gemini 1.5 (old SDK) model=%s topic=%s", model_name, topic_id)
+        logger.info("[TOPIC] Calling Gemini safety-net (old SDK) model=%s topic=%s", model_name, topic_id)
         model = genai_old.GenerativeModel(
             model_name,
             generation_config=genai_old.types.GenerationConfig(
                 response_mime_type="application/json",
                 temperature=0.4,
-                max_output_tokens=16000,
+                max_output_tokens=8192,
             ),
         )
         response = model.generate_content(full_prompt)
@@ -180,29 +187,41 @@ def _generate_topic_content(
         logger.info("[TOPIC] Parsed keys=%s", list(parsed.keys())[:10])
         return parsed
 
-    # ── Try primary (2.5 Pro) ───────────────────────────────────────────────
+    # ── Tier 1: Primary model ─────────────────────────────────────────────────
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_call_new_sdk, primary_model)
             result = future.result(timeout=240)
         if result.get("strategic_insights") or result.get("core_concepts"):
-            logger.info("[TOPIC] Generated successfully model=%s topic=%s", primary_model, topic_id)
+            logger.info("[TOPIC] Tier 1 succeeded model=%s topic=%s", primary_model, topic_id)
             return result
-        logger.warning("[TOPIC] Empty response from %s keys=%s", primary_model, list(result.keys()))
+        logger.warning("[TOPIC] Empty response from tier-1 %s keys=%s", primary_model, list(result.keys()))
     except Exception as exc:
-        logger.warning("[TOPIC] %s failed for topic=%s: %s", primary_model, topic_id, exc)
+        logger.warning("[TOPIC] Tier 1 %s failed for topic=%s: %s", primary_model, topic_id, exc)
 
-    # ── Try fallback (1.5 Flash-002) ────────────────────────────────────────
+    # ── Tier 2: Fallback model (new SDK) ──────────────────────────────────────
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_call_old_sdk, fallback_model)
+            future = executor.submit(_call_new_sdk, fallback_model)
             result = future.result(timeout=180)
         if result.get("strategic_insights") or result.get("core_concepts"):
-            logger.info("[TOPIC] Fallback succeeded model=%s topic=%s", fallback_model, topic_id)
+            logger.info("[TOPIC] Tier 2 succeeded model=%s topic=%s", fallback_model, topic_id)
             return result
-        logger.warning("[TOPIC] Empty fallback response from %s keys=%s", fallback_model, list(result.keys()))
+        logger.warning("[TOPIC] Empty response from tier-2 %s keys=%s", fallback_model, list(result.keys()))
     except Exception as exc:
-        logger.warning("[TOPIC] Fallback %s failed for topic=%s: %s", fallback_model, topic_id, exc)
+        logger.warning("[TOPIC] Tier 2 %s failed for topic=%s: %s", fallback_model, topic_id, exc)
+
+    # ── Tier 3: Safety net (old SDK, gemini-1.5-flash) ────────────────────────
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_call_old_sdk_flash)
+            result = future.result(timeout=180)
+        if result.get("strategic_insights") or result.get("core_concepts"):
+            logger.info("[TOPIC] Tier 3 safety-net succeeded topic=%s", topic_id)
+            return result
+        logger.warning("[TOPIC] Empty response from tier-3 safety-net keys=%s", list(result.keys()))
+    except Exception as exc:
+        logger.warning("[TOPIC] Tier 3 safety-net failed for topic=%s: %s", topic_id, exc)
 
     raise RuntimeError(f"All models failed for topic {topic_id}")
 
