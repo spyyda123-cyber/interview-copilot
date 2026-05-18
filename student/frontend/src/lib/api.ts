@@ -40,7 +40,7 @@ const getApiBaseUrl = () => {
   return url;
 };
 
-const API_TIMEOUT_MS = 60000;
+const API_TIMEOUT_MS = 200000;
 
 type ApiError = {
   message?: string;
@@ -129,6 +129,41 @@ export type PrepGenerateResponse = {
   status: string;
 };
 
+export type SubTopic = {
+  id: string;
+  title: string;
+};
+
+export type CurriculumTopic = {
+  id: string;
+  title: string;
+  description: string;
+  jd_relevance_note?: string;
+  difficulty: "easy" | "medium" | "hard";
+  mastery_time_minutes: number;
+  mastery_percent?: number;
+  status?: "not_started" | "in_progress" | "mastered";
+  is_critical_gap: boolean;
+  proficiency_tag: "advanced" | "intermediate" | "beginner" | "missing";
+  roi_label: "high" | "medium";
+  stage_id?: string;
+  sub_topics: SubTopic[];
+};
+
+export type CurriculumCategory = {
+  category_id: string;
+  category_title: string;
+  roi_label: "high" | "medium";
+  topics: CurriculumTopic[];
+};
+
+export type RoadmapStage = {
+  id: string;
+  title: string;
+  description: string;
+  status: "completed" | "active" | "locked" | "not_started";
+};
+
 export type LearningTask = {
   id?: number;
   day: number;
@@ -152,7 +187,7 @@ export type LearningTask = {
   code_metadata: {
     initial_code: string;
     solution?: string;
-    test_cases: any; // Can be array [{input, expected, label}] or legacy string
+    test_cases: any;
     language: string;
     difficulty?: string;
     examples?: any[];
@@ -174,9 +209,22 @@ export type PlanDetailResponse = {
   role: string;
   days_available: number;
   plan_json: {
-    overview: string;
-    daily_plan: DailyPlanItem[];
-    resources: string[];
+    // New Roadmap Engine format (Prompt 1)
+    student_name?: string;
+    company?: string;
+    role?: string;
+    target_readiness_score?: number;
+    days_left?: number;
+    roadmap_stages?: RoadmapStage[];
+    curriculum?: CurriculumCategory[];
+    weak_areas?: Array<string | { skill: string; reason: string }>;
+    high_roi_topic_ids?: string[];
+    ats_score?: number;
+    keyword_match_score?: number;
+    // Legacy daily_plan format (backward compat)
+    overview?: string;
+    daily_plan?: DailyPlanItem[];
+    resources?: string[];
   };
 };
 
@@ -553,6 +601,73 @@ export const getPrepStatus = async (
 ) => {
   return apiFetch<PrepGenerateResponse>(
     `/prep/status/${studentId}?target_id=${targetId}`
+  );
+};
+
+// ── Prompt 2 — Topic Learning Engine ─────────────────────────────────────────
+
+export type TopicContent = {
+  topic_id: string;
+  topic_name: string;
+  difficulty: string;
+  frequency_label: string;
+  mastery_time_minutes: number;
+  strategic_insights: string;
+  core_concepts: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    content: {
+      intuition: string;
+      core_mechanics: string;
+      real_world_usage: string;
+      tradeoffs: string;
+      common_mistakes: string;
+      communication_tip: string;
+    };
+  }>;
+  interview_traps: Array<{ title: string; description: string }>;
+  practice_tasks: Array<{
+    id: string;
+    title: string;
+    task_type: "code" | "qa" | "mock";
+    duration_minutes: number;
+    difficulty: string;
+    problem_statement?: string;
+    method_signatures?: string[];
+    constraints?: string[];
+    hints?: string[];
+    time_complexity_target?: string;
+    space_complexity_target?: string;
+    test_cases?: Array<{ label: string; input: string; expected_output: string }>;
+    question?: string;
+    ideal_answer_points?: string[];
+    scenario?: string;
+    evaluation_criteria?: string[];
+  }>;
+  quiz: Array<{
+    question_text: string;
+    options: string[];
+    correct_option_index: number;
+    explanation: string;
+  }>;
+  visual_explanation: {
+    type: string;
+    title: string;
+    components: any[];
+    connections: any[];
+    rows: any[];
+  };
+  communication_tips: string[];
+};
+
+export const getTopicContent = async (
+  studentId: number,
+  topicId: string,
+  targetId: number
+): Promise<TopicContent> => {
+  return apiFetch<TopicContent>(
+    `/topic/${studentId}/${topicId}?target_id=${targetId}`
   );
 };
 

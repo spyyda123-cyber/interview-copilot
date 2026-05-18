@@ -87,7 +87,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: #F5F5F5;
+  background: #f3f3f3;
 }
 
 .sidebar {
@@ -190,7 +190,7 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: #F5F5F5;
+  background: #f3f3f3;
 }
 
 .topbar {

@@ -14,14 +14,14 @@ import {
 
 /* ─── Design tokens ─────────────────────────────────────────────────────── */
 const C = {
-  bg:      "#F5F5F5",
-  white:   "#FFFFFF",
-  dark:    "#151515",
-  accent:  "#D9FF57",
-  text:    "#111111",
+  bg:      "#f3f3f3",
+  white:   "#ffffff",
+  dark:    "#222222",
+  accent:  "#d9f36e",
+  text:    "#222222",
   muted:   "#7B7B7B",
   border:  "#ECECEC",
-  gray:    "#F0F0F0",
+  gray:    "#f3f3f3",
 };
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -56,18 +56,18 @@ function Countdown({ dateStr }: { dateStr: string }) {
   }, [dateStr]);
 
   return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, margin:"16px 0" }}>
+    <div style={{ display:"flex", alignItems:"center", gap:8, margin:"0 0 16px" }}>
       {[["Days",t.d],["Hours",t.h],["Mins",t.m]].map(([label,val],i) => (
         <div key={label as string} style={{ display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ textAlign:"center" }}>
-            <div style={{ fontSize:42, fontWeight:800, color:C.white, lineHeight:1, letterSpacing:"-2px" }}>
+            <div style={{ fontSize:42, fontWeight:800, color:"#ffffff", lineHeight:1, letterSpacing:"-2px" }}>
               {String(val).padStart(2,"0")}
             </div>
             <div style={{ fontSize:9, fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:2, marginTop:2 }}>
               {label}
             </div>
           </div>
-          {i < 2 && <div style={{ fontSize:32, fontWeight:800, color:C.accent, marginBottom:16 }}>:</div>}
+          {i < 2 && <div style={{ fontSize:32, fontWeight:800, color:"#d9f36e", marginBottom:16 }}>:</div>}
         </div>
       ))}
     </div>
@@ -77,24 +77,24 @@ function Countdown({ dateStr }: { dateStr: string }) {
 /* ─── Stat Card icons ────────────────────────────────────────────────────── */
 const StatIcons = {
   calendar: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
       <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
   ),
   progress: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
       <polyline points="22 4 12 14.01 9 11.01"/>
     </svg>
   ),
   feedback: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   ),
   cleared: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
       <polyline points="17 6 23 6 23 12"/>
     </svg>
@@ -102,7 +102,7 @@ const StatIcons = {
 };
 
 /* ─── Stat Card ──────────────────────────────────────────────────────────── */
-function StatCard({ label, value, sub, icon }: { label: string; value: string|number; sub: string; icon: React.ReactNode }) {
+function StatCard({ label, value, sub, icon, valueColor }: { label: string; value: string|number; sub: string; icon: React.ReactNode; valueColor?: string }) {
   return (
     <div style={{
       background: C.white,
@@ -123,7 +123,7 @@ function StatCard({ label, value, sub, icon }: { label: string; value: string|nu
           {icon}
         </div>
       </div>
-      <p style={{ fontSize:40, fontWeight:800, color:C.text, margin:0, lineHeight:1, letterSpacing:"-1px" }}>
+      <p style={{ fontSize:40, fontWeight:800, color: valueColor ?? C.text, margin:0, lineHeight:1, letterSpacing:"-1px" }}>
         {typeof value === "number" ? String(value).padStart(2,"0") : value}
       </p>
       <p style={{ fontSize:11, color:C.muted, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -208,7 +208,7 @@ export default function DashboardPage() {
     <div style={{ width:"100%", maxWidth:1100, margin:"0 auto", fontFamily:"'Inter',sans-serif" }}>
 
       {/* ── Header ── */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
+      <div className="mt-10 lg:mt-0" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
         <h1 style={{ fontSize:28, fontWeight:800, color:C.text, margin:0, letterSpacing:"-0.5px" }}>Dashboard</h1>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div
@@ -225,14 +225,14 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Top row: 4 stat cards (left) + dark countdown card (right) ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:20, marginBottom:20 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5 mb-5">
 
         {/* 2x2 Stat cards */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-          <StatCard label="Upcoming Interviews" value={upcoming.length} sub={nextInterview ? `Next: ${nextInterview.company} · ${fmt(nextInterview.date)}` : "No upcoming interviews"} icon={StatIcons.calendar} />
-          <StatCard label="Study Plan Progress" value="68%" sub="3 topics remaining in Java" icon={StatIcons.progress} />
-          <StatCard label="Feedback Pending" value={pending.length} sub={pending.length > 0 ? `Latest: ${pending[0].company_name}` : "All caught up!"} icon={StatIcons.feedback} />
-          <StatCard label="Interviews Cleared" value={completed.length} sub={avgRelevance ? `Avg relevance: ${avgRelevance}/5` : "Give feedback for insights"} icon={StatIcons.cleared} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <StatCard label="Upcoming Interviews" value={upcoming.length} sub={nextInterview ? `Next: ${nextInterview.company} · ${fmt(nextInterview.date)}` : "No upcoming interviews"} icon={StatIcons.calendar} valueColor={C.text} />
+          <StatCard label="Study Plan Progress" value="68%" sub="3 topics remaining in Java" icon={StatIcons.progress} valueColor={C.text} />
+          <StatCard label="Feedback Pending" value={pending.length} sub={pending.length > 0 ? `Latest: ${pending[0].company_name}` : "All caught up!"} icon={StatIcons.feedback} valueColor={C.text} />
+          <StatCard label="Interviews Attended" value={completed.length} sub={avgRelevance ? `Avg relevance: ${avgRelevance}/5` : "Give feedback for insights"} icon={StatIcons.cleared} valueColor={C.text} />
         </div>
 
         {/* Dark Next Interview card */}
@@ -242,16 +242,19 @@ export default function DashboardPage() {
           </p>
           {nextInterview ? (
             <>
-              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:4 }}>
-                <div style={{ width:40, height:40, borderRadius:"50%", background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:16, color:C.dark, flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
+                <div style={{ width:40, height:40, borderRadius:"50%", background:"#d9f36e", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:16, color:"#222222", flexShrink:0 }}>
                   {nextInterview.company.charAt(0)}
                 </div>
                 <div>
-                  <p style={{ fontSize:14, fontWeight:800, color:C.white, margin:0 }}>{nextInterview.company}</p>
+                  <p style={{ fontSize:14, fontWeight:800, color:"#ffffff", margin:0 }}>{nextInterview.company}</p>
                   <p style={{ fontSize:11, color:"#888", margin:0 }}>{fmt(nextInterview.date)}</p>
                 </div>
               </div>
-              <Countdown dateStr={nextInterview.date} />
+              {/* Timer indented to align with company name text (avatar 40px + gap 12px = 52px) */}
+              <div style={{ paddingLeft: 52 }}>
+                <Countdown dateStr={nextInterview.date} />
+              </div>
               <div style={{ borderTop:"1px solid #2a2a2a", paddingTop:14, marginTop:4 }}>
                 <p style={{ fontSize:9, fontWeight:700, color:"#666", textTransform:"uppercase", letterSpacing:2, margin:"0 0 10px" }}>
                   Key Topics to Revise
@@ -277,28 +280,31 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Bottom row: My Interviews (left) + Study Progress (right) — FIXED EQUAL HEIGHT ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:20, alignItems:"start" }}>
+      {/* ── Bottom row: My Interviews (left, wider) + Study Progress (right, narrower) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-stretch">
 
-        {/* My Interviews — fixed height 380px */}
-        <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:20, padding:"22px 22px 18px", height:380, display:"flex", flexDirection:"column" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexShrink:0 }}>
+        {/* My Interviews — NO container, bare list */}
+        <div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
               <h2 style={{ fontSize:15, fontWeight:800, color:C.text, margin:0 }}>My Interviews</h2>
-              <span style={{ background:C.accent, color:C.dark, fontSize:11, fontWeight:800, padding:"2px 9px", borderRadius:20 }}>
+              <span style={{ background:C.accent, color:C.dark, fontSize:11, fontWeight:800, width:22, height:22, minWidth:22, borderRadius:"50%", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {processedInterviews.length}
               </span>
             </div>
-            <button onClick={() => router.push("/interviews")} style={{ fontSize:12, fontWeight:600, color:C.muted, background:"none", border:"none", cursor:"pointer" }}>
-              View All
-            </button>
+            {processedInterviews.length > 0 && (
+              <button
+                onClick={() => router.push("/interviews")}
+                style={{ fontSize:12, fontWeight:600, color:C.text, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", padding:0, marginRight:12 }}
+              >
+                View All
+              </button>
+            )}
           </div>
 
-          {/* Scrollable inner area — max 3 rows, hidden scrollbar */}
-          <div style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:10, scrollbarWidth:"none" }}>
-            <style>{`.interviews-scroll::-webkit-scrollbar{display:none}`}</style>
+          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
             {processedInterviews.length === 0 ? (
-              <div style={{ padding:"32px 16px", textAlign:"center", border:`1.5px dashed ${C.border}`, borderRadius:14, background:C.bg, margin:"auto 0" }}>
+              <div style={{ padding:"32px 16px", textAlign:"center", border:`1.5px dashed ${C.border}`, borderRadius:14, background:C.white }}>
                 <p style={{ fontSize:13, color:C.muted, margin:"0 0 10px" }}>No interviews yet.</p>
                 <button onClick={() => router.push("/target")} style={{ fontSize:12, fontWeight:700, color:C.dark, background:C.accent, border:"none", borderRadius:10, padding:"7px 18px", cursor:"pointer" }}>
                   Explore placements →
@@ -311,10 +317,10 @@ export default function DashboardPage() {
               return (
                 <div key={iv.id} style={{
                   display:"flex", alignItems:"center", gap:14,
-                  background:C.bg, borderRadius:14, padding:"14px 16px",
+                  background: C.white,
+                  borderRadius:14, padding:"14px 16px",
                   border:`1px solid ${C.border}`,
                   transition:"box-shadow 0.2s, transform 0.2s",
-                  flexShrink:0,
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow="0 4px 16px rgba(0,0,0,0.07)"; (e.currentTarget as HTMLDivElement).style.transform="translateY(-1px)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow="none"; (e.currentTarget as HTMLDivElement).style.transform="none"; }}
@@ -340,7 +346,7 @@ export default function DashboardPage() {
                         Feedback Given
                       </span>
                     )}
-                    <span style={{ fontSize:11, fontWeight:700, padding:"4px 14px", borderRadius:20, background: iv.status==="upcoming" ? C.dark : "#E8E8E8", color: iv.status==="upcoming" ? C.accent : C.muted }}>
+                    <span style={{ fontSize:11, fontWeight:700, padding:"4px 14px", borderRadius:20, background: iv.status==="upcoming" ? "#222222" : "#f3f3f3", color: iv.status==="upcoming" ? "#ffffff" : "#7B7B7B" }}>
                       {iv.status === "upcoming" ? "Upcoming" : "Completed"}
                     </span>
                   </div>
@@ -348,29 +354,20 @@ export default function DashboardPage() {
               );
             })}
           </div>
-
-          {/* View All button — only if > 3, pinned to bottom */}
-          {processedInterviews.length > 3 && (
-            <button onClick={() => router.push("/interviews")}
-              style={{ marginTop:12, width:"100%", padding:"9px", borderRadius:10, border:`1px solid ${C.border}`, background:"none", fontSize:12, fontWeight:700, color:C.muted, cursor:"pointer", transition:"all 0.15s", flexShrink:0 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=C.accent; (e.currentTarget as HTMLButtonElement).style.color=C.dark; (e.currentTarget as HTMLButtonElement).style.borderColor=C.accent; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="none"; (e.currentTarget as HTMLButtonElement).style.color=C.muted; (e.currentTarget as HTMLButtonElement).style.borderColor=C.border; }}
-            >
-              View all {processedInterviews.length} interviews →
-            </button>
-          )}
         </div>
 
-        {/* Study Progress — same fixed height 380px */}
-        <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:20, padding:"20px", height:380, display:"flex", flexDirection:"column" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexShrink:0 }}>
-            <h2 style={{ fontSize:14, fontWeight:800, color:C.text, margin:0 }}>Study Progress</h2>
-            <button onClick={() => router.push("/study-plan")} style={{ fontSize:11, fontWeight:600, color:C.muted, background:"none", border:"none", cursor:"pointer" }}>
+        {/* Study Progress — title OUTSIDE white container, progress bars INSIDE */}
+        <div style={{ display:"flex", flexDirection:"column" }}>
+          {/* Header outside white box — same height as My Interviews header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+            <h2 style={{ fontSize:15, fontWeight:800, color:C.text, margin:0, marginLeft:12 }}>Study Progress</h2>
+            <button onClick={() => router.push("/study-plan")} style={{ fontSize:12, fontWeight:600, color:C.text, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", padding:0 }}>
               Full Plan
             </button>
           </div>
 
-          <div style={{ flex:1, overflowY:"auto", scrollbarWidth:"none" }}>
+          {/* White container — only progress bars inside, flex-grow to match My Interviews height */}
+          <div style={{ background:C.white, border:`1px solid ${C.border}`, borderRadius:16, padding:"20px 20px 24px", flex:1 }}>
             {processedInterviews.length === 0 ? (
               <div style={{ padding:"24px 12px", textAlign:"center", border:`1.5px dashed ${C.border}`, borderRadius:12, background:C.bg }}>
                 <p style={{ fontSize:12, color:C.muted, margin:"0 0 10px" }}>Activate a study plan to track progress.</p>
@@ -379,31 +376,23 @@ export default function DashboardPage() {
                 </button>
               </div>
             ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:22 }}>
                 {processedInterviews.slice(0,3).map(iv => (
                   <div key={iv.id}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:7 }}>
-                      <p style={{ fontSize:12, fontWeight:600, color:C.text, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"70%" }}>{iv.company}</p>
-                      <p style={{ fontSize:11, color:C.muted, margin:0 }}>{iv.status==="completed"?"100%":"0%"}</p>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                      <p style={{ fontSize:13, fontWeight:700, color:C.text, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"75%" }}>{iv.company}</p>
+                      <p style={{ fontSize:12, fontWeight:700, color: iv.status==="completed" ? "#d9f36e" : C.muted, margin:0 }}>
+                        {iv.status==="completed" ? "100%" : "0%"}
+                      </p>
                     </div>
-                    <div style={{ height:5, background:C.border, borderRadius:99, overflow:"hidden" }}>
-                      <div style={{ height:"100%", borderRadius:99, background: iv.status==="completed" ? C.accent : C.dark, width: iv.status==="completed" ? "100%" : "0%", transition:"width 0.7s ease" }} />
+                    <div style={{ height:6, background:C.border, borderRadius:99, overflow:"hidden" }}>
+                      <div style={{ height:"100%", borderRadius:99, background: iv.status==="completed" ? "#d9f36e" : C.dark, width: iv.status==="completed" ? "100%" : "0%", transition:"width 0.7s ease" }} />
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
-          {processedInterviews.length > 3 && (
-            <button onClick={() => router.push("/study-plan")}
-              style={{ marginTop:12, width:"100%", padding:"8px", borderRadius:10, border:`1px solid ${C.border}`, background:"none", fontSize:11, fontWeight:700, color:C.muted, cursor:"pointer", transition:"all 0.15s", flexShrink:0 }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background=C.accent; (e.currentTarget as HTMLButtonElement).style.color=C.dark; (e.currentTarget as HTMLButtonElement).style.borderColor=C.accent; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="none"; (e.currentTarget as HTMLButtonElement).style.color=C.muted; (e.currentTarget as HTMLButtonElement).style.borderColor=C.border; }}
-            >
-              View full plan →
-            </button>
-          )}
         </div>
       </div>
 
@@ -459,7 +448,7 @@ export default function DashboardPage() {
                 </button>
                 {expandedFb===fb.id && (
                   <div style={{ margin:"0 8px 12px", background:C.bg, borderRadius:12, border:`1px solid ${C.border}`, padding:16 }}>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:12, marginBottom:12 }}>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       {[
                         { label:"Experience", val:fb.experience_rating },
                         { label:"Performance", val:fb.performance_rating },

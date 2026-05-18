@@ -224,7 +224,7 @@ function QuizSection({ quiz, onComplete }: { quiz: QuizItem[]; onComplete: () =>
         </div>
         <div>
           <h3 className="text-[15px] font-bold text-slate-800">Section Quiz</h3>
-          <p className="text-[11px] text-slate-400">{quiz.length} questions — test your understanding</p>
+          <p className="text-[11px] text-slate-400">{quiz.length} questions ï¿½ test your understanding</p>
         </div>
       </div>
 
@@ -340,7 +340,7 @@ function ModuleContent() {
         if (!studentId || !targetId) throw new Error("Session context missing");
 
         const plan = await getLatestPrep(studentId, targetId);
-        const dayData = plan.plan_json.daily_plan.find((d: any) => d.day === parseInt(dayNum));
+        const dayData = plan.plan_json.daily_plan?.find((d: any) => d.day === parseInt(dayNum));
 
         if (dayData) {
           // Map every task (regardless of task_type) to a Q&A section
@@ -389,7 +389,7 @@ function ModuleContent() {
 
             // Concepts from qa_pairs questions (first 5)
             const concepts = task.qa_pairs && task.qa_pairs.length > 0
-              ? task.qa_pairs.slice(0, 5).map((qa: any) => qa.question.slice(0, 45) + (qa.question.length > 45 ? '…' : ''))
+              ? task.qa_pairs.slice(0, 5).map((qa: any) => qa.question.slice(0, 45) + (qa.question.length > 45 ? 'ï¿½' : ''))
               : [task.title];
 
             return {
@@ -504,7 +504,7 @@ function ModuleContent() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-slate-800">{moduleTitle}</h1>
-            <p className="text-[12px] text-slate-400">{company} — Preparation Module</p>
+            <p className="text-[12px] text-slate-400">{company} ï¿½ Preparation Module</p>
           </div>
         </div>
         <Timer totalSeconds={(currentSection?.timeMinutes || 20) * 60} onExpire={handleTimerExpire} />
@@ -551,7 +551,7 @@ function ModuleContent() {
       {/* Progress */}
       <div className="flex items-center justify-between mb-4 px-1">
         <p className="text-[12px] text-slate-400 font-medium">
-          Section {currentSectionIdx + 1} of {sections.length} — <strong className="text-slate-600">{currentSection.title}</strong>
+          Section {currentSectionIdx + 1} of {sections.length} ï¿½ <strong className="text-slate-600">{currentSection.title}</strong>
         </p>
         <p className="text-[12px] text-slate-400">
           <span className="text-indigo-500 font-bold">{answeredCount}</span> / {totalQuestions} answers revealed
@@ -644,7 +644,7 @@ function ModuleContent() {
         })}
       </div>
 
-      {/* Quiz — shown after all answers revealed */}
+      {/* Quiz ï¿½ shown after all answers revealed */}
       {allRevealed && !quizDone && currentSection.quiz && currentSection.quiz.length > 0 && (
         <QuizSection
           quiz={currentSection.quiz}
@@ -655,11 +655,11 @@ function ModuleContent() {
         />
       )}
 
-      {/* Complete button — shown when no quiz or quiz done */}
+      {/* Complete button ï¿½ shown when no quiz or quiz done */}
       {(!allRevealed || (allRevealed && (!currentSection.quiz || currentSection.quiz.length === 0))) && (
         <div className="flex items-center justify-between mt-6">
           <p className="text-[11px] text-slate-400">
-            {allRevealed ? "? All answers revealed — complete the section" : `Reveal all ${totalQuestions} answers to unlock the quiz`}
+            {allRevealed ? "? All answers revealed ï¿½ complete the section" : `Reveal all ${totalQuestions} answers to unlock the quiz`}
           </p>
           <button
             onClick={handleCompleteSection}

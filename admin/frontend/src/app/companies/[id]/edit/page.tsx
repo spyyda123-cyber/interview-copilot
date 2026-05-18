@@ -64,7 +64,20 @@ export default function EditCompanyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.company_name || !formData.role) return;
+    if (
+      !formData.company_name || 
+      !formData.role || 
+      !formData.package_min || 
+      !formData.package_max || 
+      !formData.interview_date || 
+      !formData.min_cgpa || 
+      !formData.max_backlogs || 
+      formData.eligible_departments.length === 0 || 
+      !formData.job_description
+    ) {
+      setError("Please fill in all required fields and select at least one department.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -130,7 +143,9 @@ export default function EditCompanyPage() {
           <form onSubmit={handleSubmit} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-6">
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Company name</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Company name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
@@ -142,7 +157,9 @@ export default function EditCompanyPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Role</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Role <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
@@ -156,11 +173,14 @@ export default function EditCompanyPage() {
 
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Package (LPA)</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Package (LPA) <span className="text-red-500">*</span>
+                </label>
                 <div className="flex gap-4">
                   <input
                     type="number"
                     step="0.1"
+                    required
                     placeholder="Min"
                     className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     value={formData.package_min}
@@ -169,6 +189,7 @@ export default function EditCompanyPage() {
                   <input
                     type="number"
                     step="0.1"
+                    required
                     placeholder="Max"
                     className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     value={formData.package_max}
@@ -178,9 +199,12 @@ export default function EditCompanyPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Interview date</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Interview date <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
+                  required
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   value={formData.interview_date}
                   onChange={(e) => setFormData({ ...formData, interview_date: e.target.value })}
@@ -190,10 +214,13 @@ export default function EditCompanyPage() {
 
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Min CGPA</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Min CGPA <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
                   step="0.1"
+                  required
                   placeholder="e.g. 6.5"
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   value={formData.min_cgpa}
@@ -202,9 +229,12 @@ export default function EditCompanyPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Max backlogs</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Max backlogs <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="number"
+                  required
                   placeholder="e.g. 0"
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   value={formData.max_backlogs}
@@ -214,7 +244,9 @@ export default function EditCompanyPage() {
             </div>
 
             <div className="space-y-2 border-t border-gray-100 pt-6">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Eligible departments</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Eligible departments <span className="text-red-500">*</span>
+              </label>
               <div className="flex flex-wrap gap-2 rounded-xl border border-gray-200 p-2 overflow-y-auto max-h-32">
                 {DEPARTMENTS.map((dept) => (
                   <button
@@ -234,9 +266,12 @@ export default function EditCompanyPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Job description</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Job description <span className="text-red-500">*</span>
+              </label>
               <textarea
                 rows={4}
+                required
                 placeholder="Paste full JD..."
                 className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y"
                 value={formData.job_description}

@@ -283,15 +283,16 @@ def get_latest_prep_plan(
     if plan.status == "generating":
         raise HTTPException(status_code=404, detail="Plan is still generating")
 
-    # ── Return 404 for empty plan_json (stub created during activation) ───
-    daily_plan = (plan.plan_json or {}).get("daily_plan")
-    if not daily_plan or not isinstance(daily_plan, list) or len(daily_plan) == 0:
+    # ── Return 404 for empty plan_json — support both new curriculum and legacy daily_plan ──
+    plan_json = plan.plan_json or {}
+    has_curriculum = isinstance(plan_json.get("curriculum"), list) and len(plan_json.get("curriculum", [])) > 0
+    has_daily_plan = isinstance(plan_json.get("daily_plan"), list) and len(plan_json.get("daily_plan", [])) > 0
+    if not has_curriculum and not has_daily_plan:
         raise HTTPException(status_code=404, detail="Plan content not ready yet")
 
-    # ── Auto-detect wrong-role cached plan and invalidate it ──────────────
-    # If the plan overview mentions a different technology than the target role,
-    # mark it as failed so the frontend triggers regeneration.
-    if plan.status == "ready" and plan.plan_json:
+    # ── Auto-detect wrong-role cached plan (legacy daily_plan format only) ──
+    # New curriculum format plans are trusted — they were generated with the correct role.
+    if plan.status == "ready" and plan.plan_json and not has_curriculum:
         overview = (plan.plan_json.get("overview") or "").lower()
         role_lower = (target.role or "").lower()
 
@@ -302,7 +303,6 @@ def get_latest_prep_plan(
 
         wrong_plan = (is_java_plan and is_python_role) or (is_python_plan and is_java_role)
         if wrong_plan:
-            # Delete stale plan — frontend will call /prep/generate to trigger fresh generation
             db.delete(plan)
             db.commit()
             raise HTTPException(status_code=404, detail="Plan not found — wrong role content, regenerating")

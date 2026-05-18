@@ -59,89 +59,115 @@ export default function Sidebar() {
     router.replace("/login");
   };
 
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <aside
-      style={{
-        width: 220,
-        minWidth: 220,
-        height: "100vh",
-        background: "#FFFFFF",
-        borderRight: "1px solid #ECECEC",
-        display: "flex",
-        flexDirection: "column",
-        padding: "28px 0 24px",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        zIndex: 50,
-      }}
-    >
-      {/* ── Brand ── */}
-      <div style={{ padding: "0 20px 32px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: "50%",
-            background: "#D9FF57",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-            </svg>
+    <>
+      {/* Mobile Hamburger Button */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="lg:hidden fixed top-5 left-5 z-40 p-2 rounded-md bg-white shadow-sm border border-gray-200 text-gray-800"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 z-40" 
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`sidebar ${mobileOpen ? '!flex !fixed !inset-y-0 !left-0 !z-50 !w-64' : ''}`}
+        style={{
+          padding: "28px 0 24px",
+          zIndex: 50,
+        }}
+      >
+        {/* ── Brand ── */}
+        <div style={{ padding: "0 20px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: "50%",
+              background: "#D9FF57",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111111" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+              </svg>
+            </div>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "#111111", letterSpacing: "-0.3px" }}>
+              CoPilot
+            </span>
           </div>
-          <span style={{ fontSize: 15, fontWeight: 800, color: "#111111", letterSpacing: "-0.3px" }}>
-            CoPilot
-          </span>
-        </div>
-      </div>
-
-      {/* ── Nav ── */}
-      <nav style={{ flex: 1, padding: "0 12px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV.map(({ label, href, Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          return (
-            <button
-              key={href}
-              onClick={() => router.push(href)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 12px", borderRadius: 10, border: "none",
-                cursor: "pointer", width: "100%", textAlign: "left",
-                background: active ? "#F5F5F5" : "transparent",
-                color: active ? "#111111" : "#7B7B7B",
-                fontSize: 13, fontWeight: active ? 700 : 500,
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="#F9F9F9"; (e.currentTarget as HTMLButtonElement).style.color="#111111"; } }}
-              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; } }}
-            >
-              <div style={{ width:7, height:7, borderRadius:"50%", background: active ? "#D9FF57" : "transparent", border: active ? "none" : "1.5px solid #CECECE", flexShrink:0, transition:"all 0.15s" }} />
-              <Icon />
-              <span>{label}</span>
+          {mobileOpen && (
+            <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
             </button>
-          );
-        })}
+          )}
+        </div>
 
-        {/* Sign Out — directly below Study Plan, separated by a thin line */}
-        <div style={{ height:1, background:"#ECECEC", margin:"8px 4px" }} />
-        <button
-          onClick={handleSignOut}
-          style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "9px 12px", borderRadius: 10, border: "none",
-            cursor: "pointer", width: "100%", textAlign: "left",
-            background: "transparent", color: "#7B7B7B",
-            fontSize: 13, fontWeight: 500, transition: "all 0.15s ease",
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background="#FFF0F0"; (e.currentTarget as HTMLButtonElement).style.color="#EF4444"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; }}
-        >
-          <div style={{ width:7, height:7, borderRadius:"50%", border:"1.5px solid #CECECE", flexShrink:0 }} />
-          <IconLogOut />
-          <span>Sign Out</span>
-        </button>
-      </nav>
-    </aside>
+        {/* ── Nav ── */}
+        <nav style={{ flex: 1, padding: "0 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+          {NAV.map(({ label, href, Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + "/");
+            return (
+              <button
+                key={href}
+                onClick={() => {
+                  setMobileOpen(false);
+                  router.push(href);
+                }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "9px 12px", borderRadius: 10, border: "none",
+                  cursor: "pointer", width: "100%", textAlign: "left",
+                  background: active ? "#f3f3f3" : "transparent",
+                  color: active ? "#111111" : "#7B7B7B",
+                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="#F9F9F9"; (e.currentTarget as HTMLButtonElement).style.color="#111111"; } }}
+                onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; } }}
+              >
+                <div style={{ width:7, height:7, borderRadius:"50%", background: active ? "#D9FF57" : "transparent", border: active ? "none" : "1.5px solid #CECECE", flexShrink:0, transition:"all 0.15s" }} />
+                <Icon />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+
+          {/* Sign Out — directly below Study Plan, separated by a thin line */}
+          <div style={{ height:1, background:"#ECECEC", margin:"8px 4px" }} />
+          <button
+            onClick={handleSignOut}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "9px 12px", borderRadius: 10, border: "none",
+              cursor: "pointer", width: "100%", textAlign: "left",
+              background: "transparent", color: "#7B7B7B",
+              fontSize: 13, fontWeight: 500, transition: "all 0.15s ease",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background="#FFF0F0"; (e.currentTarget as HTMLButtonElement).style.color="#EF4444"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; }}
+          >
+            <div style={{ width:7, height:7, borderRadius:"50%", border:"1.5px solid #CECECE", flexShrink:0 }} />
+            <IconLogOut />
+            <span>Sign Out</span>
+          </button>
+        </nav>
+      </aside>
+    </>
   );
 }

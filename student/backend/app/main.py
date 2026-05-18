@@ -22,6 +22,7 @@ from app.api import (
     scorm,
     feedback,
     placement,
+    topic,
 )
 from app.core.config import masked_gemini_key, settings
 from app.db.base import Base
@@ -93,6 +94,7 @@ app.include_router(system.router)
 app.include_router(scorm.router)
 app.include_router(feedback.router)
 app.include_router(placement.router)
+app.include_router(topic.router)
 
 
 @app.get("/health")

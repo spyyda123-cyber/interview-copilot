@@ -88,59 +88,72 @@ def _load_prompt(name: str) -> str:
 
 
 def _parse_plan_json(raw_response: str) -> dict:
+    """Parse plan JSON from LLM response, with repair for truncated Gemini output."""
+    # 1. Direct parse
     try:
         return json.loads(raw_response)
     except json.JSONDecodeError:
-        start = raw_response.find("{")
-        end = raw_response.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            return json.loads(raw_response[start : end + 1])
-        raise
+        pass
+
+    # 2. Extract JSON block between first { and last }
+    start = raw_response.find("{")
+    end = raw_response.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(raw_response[start: end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Attempt to repair truncated JSON (Gemini token-limit truncation)
+    try:
+        from app.services.llm_client import _repair_truncated_json
+        repaired = _repair_truncated_json(raw_response[start:] if start != -1 else raw_response)
+        result = json.loads(repaired)
+        logger.warning("[PLAN-PARSE] Used JSON repair — Gemini response was truncated. Partial plan recovered.")
+        return result
+    except Exception as repair_exc:
+        logger.error("[PLAN-PARSE] JSON repair also failed: %s", repair_exc)
+
+    raise json.JSONDecodeError("Cannot parse plan JSON after all repair attempts", raw_response, 0)
 
 
 def _validate_plan_json(plan_data: dict) -> bool:
     """Validate plan JSON has required structure for database storage.
-    
-    RELIABILITY: Ensures plan has minimum required fields before insert.
-    If validation fails, plan deemed invalid and retry attempted.
-    
-    Required structure:
-    {
-      "daily_plan": [
-        {
-          "day": int,
-          "tasks": [
-            {"title": str, "description": str, "duration_minutes": int}
-          ]
-        }
-      ]
-    }
-    
-    Args:
-        plan_data: Parsed JSON dict from Gemini
-        
-    Returns:
-        bool: True if valid, False otherwise
+
+    Accepts both:
+    - New Roadmap Engine format: { curriculum[], roadmap_stages[], ... }
+    - Legacy daily_plan format: { daily_plan[], overview, resources }
     """
     if not isinstance(plan_data, dict):
         return False
-    
+
+    # New Roadmap Engine format (Prompt 1)
+    if "curriculum" in plan_data:
+        curriculum = plan_data.get("curriculum")
+        if not isinstance(curriculum, list) or len(curriculum) == 0:
+            return False
+        for category in curriculum:
+            if not isinstance(category, dict):
+                return False
+            topics = category.get("topics")
+            if not isinstance(topics, list):
+                return False
+        return True
+
+    # Legacy daily_plan format
     daily_plan = plan_data.get("daily_plan")
     if not isinstance(daily_plan, list) or len(daily_plan) == 0:
         return False
-    
+
     for day_data in daily_plan:
         if not isinstance(day_data, dict):
             return False
-        
         day_num = day_data.get("day")
         if not isinstance(day_num, int) or day_num < 1:
             return False
-        
         tasks = day_data.get("tasks")
         if not isinstance(tasks, list) or len(tasks) == 0:
             return False
-        
         for task in tasks:
             if not isinstance(task, dict):
                 return False
@@ -152,7 +165,7 @@ def _validate_plan_json(plan_data: dict) -> bool:
                 return False
             if not isinstance(task.get("task_type"), str):
                 return False
-    
+
     return True
 
 
@@ -1622,22 +1635,44 @@ def generate_learning_plan(
     db.query(LearningTask).filter(LearningTask.plan_id == plan.id).delete()
     db.commit()
 
-    for day_data in plan_data.get("daily_plan", []):
-        day_num = day_data["day"]
-        for task_index, task_data in enumerate(day_data["tasks"], start=1):
-            task = LearningTask(
-                plan_id=plan.id,
-                day=day_num,
-                task_order=task_index,
-                title=task_data["title"],
-                description=task_data["description"],
-                duration_minutes=task_data["duration_minutes"],
-                task_type=task_data.get("task_type", "text"),
-                qa_pairs=task_data.get("qa_pairs"),
-                quiz=task_data.get("quiz"),
-                code_metadata=task_data.get("code_metadata"),
-            )
-            db.add(task)
+    # Handle both new Roadmap Engine format (curriculum[]) and legacy daily_plan format
+    if "curriculum" in plan_data:
+        # New format — store each topic as a LearningTask for DB compatibility
+        task_order = 1
+        for category in plan_data.get("curriculum", []):
+            for topic in category.get("topics", []):
+                task = LearningTask(
+                    plan_id=plan.id,
+                    day=1,
+                    task_order=task_order,
+                    title=topic.get("title", ""),
+                    description=topic.get("description", ""),
+                    duration_minutes=topic.get("mastery_time_minutes", 60),
+                    task_type="qa",
+                    qa_pairs=None,
+                    quiz=None,
+                    code_metadata=None,
+                )
+                db.add(task)
+                task_order += 1
+    else:
+        # Legacy daily_plan format
+        for day_data in plan_data.get("daily_plan", []):
+            day_num = day_data["day"]
+            for task_index, task_data in enumerate(day_data["tasks"], start=1):
+                task = LearningTask(
+                    plan_id=plan.id,
+                    day=day_num,
+                    task_order=task_index,
+                    title=task_data["title"],
+                    description=task_data["description"],
+                    duration_minutes=task_data["duration_minutes"],
+                    task_type=task_data.get("task_type", "text"),
+                    qa_pairs=task_data.get("qa_pairs"),
+                    quiz=task_data.get("quiz"),
+                    code_metadata=task_data.get("code_metadata"),
+                )
+                db.add(task)
 
     logger.info("[PLAN-TRACE] Step 7: Live plan saved to DB. plan_id=%s status=ready", plan.id)
     db.commit()

@@ -18,9 +18,10 @@ class Settings(BaseSettings):
     OPENAI_FALLBACK_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str = ""
     GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
-    GEMINI_GENERATION_MODEL: str = "gemini-1.5-flash-latest"
-    # LLM provider: "openai" uses GPT-4 API, "gemini" uses Gemini API
-    LLM_PROVIDER: str = "openai"
+    GEMINI_GENERATION_MODEL: str = "gemini-2.5-pro"
+    GEMINI_FALLBACK_MODEL: str = "models/gemini-2.5-flash"
+    # LLM provider: "gemini" uses Gemini 2.5 Pro/Flash, "openai" uses GPT-4o
+    LLM_PROVIDER: str = "gemini"
 
     UPLOAD_DIR: str = "storage/resumes"
     KNOWLEDGE_DIR: str = "storage/knowledge"

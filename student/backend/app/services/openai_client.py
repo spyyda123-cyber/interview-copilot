@@ -66,120 +66,93 @@ class OpenAIProviderError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# JSON schema for structured plan output
+# JSON schema for Prompt 1 — Roadmap Engine output
 # ---------------------------------------------------------------------------
 PLAN_SCHEMA: Dict[str, Any] = {
-    "name": "learning_plan",
+    "name": "roadmap_plan",
     "strict": True,
     "schema": {
         "type": "object",
         "properties": {
-            "overview": {"type": "string"},
-            "daily_plan": {
+            "student_name": {"type": "string"},
+            "company": {"type": "string"},
+            "role": {"type": "string"},
+            "target_readiness_score": {"type": "integer"},
+            "days_left": {"type": "integer"},
+            "roadmap_stages": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "day": {"type": "integer"},
-                        "focus": {"type": "string"},
-                        "tasks": {
+                        "id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "status": {"type": "string", "enum": ["completed", "active", "locked"]}
+                    },
+                    "required": ["id", "title", "description", "status"],
+                    "additionalProperties": False
+                }
+            },
+            "curriculum": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "category_id": {"type": "string"},
+                        "category_title": {"type": "string"},
+                        "roi_label": {"type": "string", "enum": ["high", "medium"]},
+                        "topics": {
                             "type": "array",
                             "items": {
                                 "type": "object",
                                 "properties": {
+                                    "id": {"type": "string"},
                                     "title": {"type": "string"},
                                     "description": {"type": "string"},
-                                    "duration_minutes": {"type": "integer"},
-                                    "task_type": {"type": "string", "enum": ["text", "qa", "code"]},
-                                    "qa_pairs": {
+                                    "stage_id": {"type": "string"},
+                                    "jd_relevance_note": {"type": ["string", "null"]},
+                                    "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"]},
+                                    "mastery_time_minutes": {"type": "integer"},
+                                    "mastery_percent": {"type": "integer"},
+                                    "status": {"type": "string", "enum": ["not_started", "in_progress", "mastered"]},
+                                    "is_critical_gap": {"type": "boolean"},
+                                    "proficiency_tag": {"type": "string", "enum": ["advanced", "intermediate", "beginner", "missing"]},
+                                    "roi_label": {"type": "string", "enum": ["high", "medium"]},
+                                    "sub_topics": {
                                         "type": "array",
-                                        "minItems": 3,
                                         "items": {
                                             "type": "object",
                                             "properties": {
-                                                "question": {"type": "string"},
-                                                "answer": {"type": "string"},
-                                                "explanation": {"type": "string"},
-                                                "transition_note": {"type": ["string", "null"]}
+                                                "id": {"type": "string"},
+                                                "title": {"type": "string"}
                                             },
-                                            "required": ["question", "answer", "explanation", "transition_note"],
+                                            "required": ["id", "title"],
                                             "additionalProperties": False
                                         }
-                                    },
-                                    "quiz": {
-                                        "type": "array",
-                                        "minItems": 2,
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "question": {"type": "string"},
-                                                "options": {
-                                                    "type": "array",
-                                                    "items": {"type": "string"},
-                                                    "minItems": 4,
-                                                    "maxItems": 4
-                                                },
-                                                "correct_index": {"type": "integer", "minimum": 0, "maximum": 3},
-                                                "explanation": {"type": "string"}
-                                            },
-                                            "required": ["question", "options", "correct_index", "explanation"],
-                                            "additionalProperties": False
-                                        }
-                                    },
-                                    "code_metadata": {
-                                        "type": ["object", "null"],
-                                        "properties": {
-                                            "language": {"type": "string"},
-                                            "initial_code": {"type": "string"},
-                                            "solution": {"type": "string"},
-                                            "difficulty": {"type": "string", "enum": ["Easy", "Medium", "Hard"]},
-                                            "examples": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "input": {"type": "string"},
-                                                        "output": {"type": "string"},
-                                                        "explanation": {"type": "string"}
-                                                    },
-                                                    "required": ["input", "output", "explanation"],
-                                                    "additionalProperties": False
-                                                }
-                                            },
-                                            "constraints": {"type": "array", "items": {"type": "string"}},
-                                            "test_cases": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "input": {"type": "string"},
-                                                        "expected": {"type": "string"},
-                                                        "label": {"type": "string"}
-                                                    },
-                                                    "required": ["input", "expected", "label"],
-                                                    "additionalProperties": False
-                                                }
-                                            }
-                                        },
-                                        "required": ["language", "initial_code", "solution", "difficulty", "examples", "constraints", "test_cases"],
-                                        "additionalProperties": False
                                     }
                                 },
-                                 "required": ["title", "description", "duration_minutes", "task_type", "qa_pairs", "quiz", "code_metadata"],
-                                 "additionalProperties": False,
-                             },
-                         },
-                     },
-                     "required": ["day", "focus", "tasks"],
-                     "additionalProperties": False,
-                 },
-             },
-             "resources": {"type": "array", "items": {"type": "string"}},
-         },
-         "required": ["overview", "daily_plan", "resources"],
-         "additionalProperties": False,
-     },
- }
+                                "required": ["id", "title", "description", "stage_id", "difficulty", "mastery_time_minutes",
+                                             "mastery_percent", "status", "is_critical_gap", "proficiency_tag",
+                                             "roi_label", "sub_topics"],
+                                "additionalProperties": False
+                            }
+                        }
+                    },
+                    "required": ["category_id", "category_title", "roi_label", "topics"],
+                    "additionalProperties": False
+                }
+            },
+            "weak_areas": {"type": "array", "items": {"type": "string"}},
+            "high_roi_topic_ids": {"type": "array", "items": {"type": "string"}},
+            "ats_score": {"type": "integer"},
+            "keyword_match_score": {"type": "integer"}
+        },
+        "required": ["student_name", "company", "role", "target_readiness_score", "days_left",
+                     "roadmap_stages", "curriculum", "weak_areas", "high_roi_topic_ids",
+                     "ats_score", "keyword_match_score"],
+        "additionalProperties": False
+    }
+}
 
 # JSON schema for JD analysis output
 JD_ANALYSIS_SCHEMA: Dict[str, Any] = {
@@ -346,135 +319,73 @@ def _build_language_transition_block(context: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# User message builder
+# User message builder — Prompt 1 (Roadmap Engine)
 # ---------------------------------------------------------------------------
 
 def _build_user_message(context: dict) -> str:
-    student_name     = context.get("student_name", "Student")
-    primary_skill    = context.get("primary_skill", "Not specified")
-    known_skills     = context.get("known_skills", [])
-    days_available   = context.get("days_available", 7)
-    support_mode     = context.get("support_mode", "Guided coaching")
-    tone             = context.get("tone", "Supportive")
-    coding_required  = context.get("coding_required", True)
+    """Build the user message payload for Prompt 1 (Roadmap Engine)."""
+    student_name    = context.get("student_name", "Student")
+    primary_skill   = context.get("primary_skill", "Not specified")
+    known_skills    = context.get("known_skills", [])
+    days_available  = context.get("days_available", 14)
+    coding_required = context.get("coding_required", True)
 
-    company_name     = context.get("company_name", "Unknown")
-    role             = context.get("role", "General")
-    difficulty       = context.get("difficulty", "Unknown")
-    round_structure  = context.get("round_structure", "Standard")
-    jd_text          = context.get("jd_text", "Not provided")
+    company_name    = context.get("company_name", "Unknown")
+    role            = context.get("role", "General")
+    difficulty      = context.get("difficulty", "Unknown")
+    round_structure = context.get("round_structure", "Standard")
+    jd_text         = context.get("jd_text", "Not provided")
+    required_skills = context.get("required_skills", [])
 
-    ats_score        = context.get("ats_score", 0)
-    missing_skills   = context.get("missing_skills", [])
-    keyword_score    = context.get("keyword_score", 0)
+    ats_score       = context.get("ats_score", 0)
+    missing_skills  = context.get("missing_skills", [])
+    keyword_score   = context.get("keyword_score", 0)
 
-    resume_context      = context.get("resume_context", "Not available")[:800]   # Trimmed for speed
-    profile_context     = context.get("profile_context", "Not available")[:400]
+    resume_context       = context.get("resume_context", "Not available")[:1000]
     company_intelligence = context.get("company_context", "No company interview intelligence available")[:600]
 
     # Format known_skills
     known_skills_limited = known_skills[:15] if isinstance(known_skills, list) else []
-    skills_lines = []
+    skills_list = []
     for item in known_skills_limited:
         if isinstance(item, dict):
-            skills_lines.append(f"  - {item.get('skill', 'Unknown')} [{item.get('proficiency', 'Unknown')}]")
+            skills_list.append({
+                "skill": item.get("skill", "Unknown"),
+                "proficiency": item.get("proficiency", "Unknown")
+            })
         else:
-            skills_lines.append(f"  - {item} [Unknown]")
-    known_skills_str = "\n".join(skills_lines) or "  Not specified"
+            skills_list.append({"skill": str(item), "proficiency": "Unknown"})
 
-    missing_skills_str = ", ".join(missing_skills) if missing_skills else "None"
+    import json as _json
+    payload = {
+        "student_profile": {
+            "name": student_name,
+            "primary_skill": primary_skill,
+            "skills": skills_list,
+            "coding_required": coding_required
+        },
+        "resume": {
+            "parsed_sections": resume_context,
+            "raw_text": resume_context
+        },
+        "target_interview": {
+            "company": company_name,
+            "role": role,
+            "jd_text": jd_text[:800] if jd_text else "Not provided",
+            "required_skills": required_skills,
+            "difficulty": difficulty,
+            "round_structure": round_structure
+        },
+        "resume_gap_analysis": {
+            "missing_skills": missing_skills,
+            "ats_score": ats_score,
+            "keyword_match_score": keyword_score
+        },
+        "company_intelligence": company_intelligence if company_intelligence != "No company interview intelligence available" else None,
+        "days_left": days_available
+    }
 
-    # Truncate JD
-    jd_trimmed = jd_text[:500] if jd_text and len(jd_text) > 500 else jd_text
-
-    # Cross-language transition block (activates system prompt Section 5)
-    lang_block = _build_language_transition_block(context)
-    lang_section = f"\n{lang_block}\n" if lang_block else ""
-    marksheet_context = context.get("marksheet_context", "No marksheets uploaded.")
-
-    return f"""STUDENT PROFILE:
-* Name: {student_name}
-* Primary Skill: {primary_skill}
-* Known Skills (with proficiency):
-{known_skills_str}
-* Days Remaining Until Interview: {days_available}
-* Support Mode: {support_mode}
-* Preferred Tone: {tone}
-* Coding Tasks Required: {coding_required}
-
-STUDENT PROFILE CONTEXT:
-{profile_context}
-
-MARKSHEETS (Academic Foundation):
-{marksheet_context}
-
-TARGET INTERVIEW — BUILD THE ENTIRE PLAN AROUND THIS:
-* Company: {company_name}
-* Role: {role}
-* Difficulty Level: {difficulty}
-* Interview Round Structure: {round_structure}
-* Job Description:
-{jd_trimmed}
-
-RESUME GAP ANALYSIS — PRIORITIZE THESE IN DAY 1-2:
-* ATS Score: {ats_score}%
-* Missing Skills: {missing_skills_str}
-* Keyword Match Score: {keyword_score}%
-
-RESUME CONTEXT (use for STAR stories):
-{resume_context}
-
-COMPANY INTERVIEW INTELLIGENCE:
-{company_intelligence}
-{lang_section}
-
-GENERATE A {days_available}-DAY PERSONALIZED STUDY PLAN FOR:
-→ Student: {student_name} (background: {primary_skill})
-→ Target: {role} at {company_name}
-→ Time available: {days_available} days
-→ Missing skills to fix first: {missing_skills_str}
-
-⚠️ MANDATORY RULES — VIOLATION = REJECTED PLAN:
-
-RULE 1 — ROLE-SPECIFIC CONTENT (MOST IMPORTANT):
-The plan MUST cover topics required for "{role}" at "{company_name}".
-Read the JD above carefully. Use ONLY the technologies and skills mentioned in the JD.
-- Machine Learning Engineer → Python, ML algorithms, scikit-learn, pandas, model evaluation, statistics, feature engineering
-- Java Backend Developer → Java, Spring Boot, JPA, REST APIs, Maven, microservices
-- Python Developer → Python OOP, FastAPI/Django, async, decorators, testing
-- Data Scientist → Python, SQL, statistics, ML, data visualization, EDA
-- Frontend Developer → JavaScript/TypeScript, React, CSS, performance
-- NEVER generate Java content for a Python/ML role. NEVER generate Python content for a Java role.
-
-RULE 2 — COMPANY-SPECIFIC TASKS:
-- Every behavioral task MUST reference "{company_name}" specifically
-- "Why {company_name}?" prep task is MANDATORY
-- Reference the company's domain in technical tasks
-
-RULE 3 — STUDENT-SPECIFIC TASKS:
-- Day 1-2: Address missing skills from gap analysis first (disqualifiers)
-- Use resume projects for STAR story tasks
-- Support Mode "{support_mode}": Guided = step-by-step; Self-paced = concise; Adaptive = gap-based
-- Tone "{tone}": Supportive = encouraging; Direct = no-fluff; Neutral = balanced
-
-RULE 4 — TIME ADAPTATION ({days_available} days):
-{"SURVIVAL: Top 5 topics only, rapid Q&A, 3 STAR stories, mental prep" if days_available <= 1 else "SPRINT: High-probability topics, one mock, one behavioral session" if days_available <= 3 else "STRUCTURED: Full JD coverage, mock on day " + str(max(1, days_available - 2)) + ", revision on last day" if days_available <= 7 else "FULL ROADMAP: Week 1 fixes disqualifiers, Week 2+ builds depth and mock interviews"}
-
-RULE 5 — EVERY TASK MUST HAVE qa_pairs AND quiz:
-- qa_pairs: 3-5 items per task, each with question + answer + explanation (4+ paragraphs) + transition_note
-- quiz: 2-3 MCQs with 4 options, correct_index, explanation
-- Last task of EVERY day: "Module Mastery Quiz" (5 qa_pairs + 3 quiz questions)
-
-RULE 6 — SECOND-TO-LAST DAY = CODING MOCK TESTS:
-- task_type="code" with real DSA problems relevant to {role}
-- Full code_metadata: language, initial_code, solution, difficulty, description, hint, examples, constraints, test_cases (5+)
-
-RULE 7 — LAST DAY = BEHAVIORAL INTERVIEW:
-- Focus: "Behavioral Interview"
-- Tasks: Tell Me About Yourself, STAR Scenarios, HR Questions, Module Mastery Quiz
-- All task_type="qa", NO code tasks
-
-Return ONLY valid JSON. No markdown, no code fences, no explanation text."""
+    return _json.dumps(payload, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -575,9 +486,9 @@ def generate_learning_plan(context: dict) -> dict:
                 )
                 plan_data = json.loads(raw_json)
 
-                # Basic validation
-                if not isinstance(plan_data.get("daily_plan"), list):
-                    logger.warning("[GPT5-PLAN] daily_plan missing, retrying…")
+                # Basic validation — new schema uses curriculum[] not daily_plan[]
+                if not isinstance(plan_data.get("curriculum"), list):
+                    logger.warning("[GPT5-PLAN] curriculum missing, retrying…")
                     continue
 
                 logger.info("[GPT5-PLAN] Plan generated successfully model=%s", model)

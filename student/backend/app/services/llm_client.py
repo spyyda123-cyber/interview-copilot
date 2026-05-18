@@ -114,12 +114,14 @@ def _get_generation_model_name() -> str:
     configured = settings.GEMINI_GENERATION_MODEL.strip()
     preferred_candidates = [
         configured,
+        "gemini-2.5-pro-preview-05-06",
+        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
         "models/gemini-1.5-flash",
         "models/gemini-1.5-pro",
-        "models/gemini-1.0-pro",
         "gemini-1.5-flash",
         "gemini-1.5-pro",
-        "gemini-1.0-pro",
     ]
     try:
         available = [
@@ -140,23 +142,68 @@ def _get_generation_model_name() -> str:
     return selected
 
 
+def _repair_truncated_json(raw: str) -> str:
+    """Attempt to repair truncated JSON from Gemini by closing open structures.
+
+    Gemini sometimes hits its output token limit mid-JSON, leaving unclosed
+    arrays/objects. This function tries to close them so json.loads() succeeds.
+    Only the daily_plan array up to the last fully-formed day is kept.
+    """
+    # Find the last complete day object — look for the last '}' before a ',' or ']'
+    # Strategy: truncate at the last valid complete day boundary
+    # Find all positions of '"day":' to locate day boundaries
+    import re as _re
+
+    # Try to find the last position where a complete day object ends
+    # A complete day ends with: ...}  (closing the tasks array and day object)
+    # We look for the pattern: closing of tasks array + closing of day object
+    day_end_pattern = _re.compile(r'\]\s*\}')  # closes tasks array + day object
+    matches = list(day_end_pattern.finditer(raw))
+
+    if not matches:
+        raise json.JSONDecodeError("Cannot repair JSON — no complete day found", raw, 0)
+
+    # Use the last complete day boundary
+    last_end = matches[-1].end()
+    truncated = raw[:last_end]
+
+    # Now close the daily_plan array and the root object
+    # Count open brackets to determine what needs closing
+    open_brackets = truncated.count('[') - truncated.count(']')
+    open_braces = truncated.count('{') - truncated.count('}')
+
+    repaired = truncated
+    repaired += ']' * max(0, open_brackets)
+    repaired += '}' * max(0, open_braces)
+
+    # Ensure resources array exists
+    try:
+        parsed = json.loads(repaired)
+        if 'resources' not in parsed:
+            parsed['resources'] = ["Review official documentation for the target role technologies."]
+        return json.dumps(parsed)
+    except json.JSONDecodeError:
+        raise
+
+
 def _generate_content_with_timeout(prompt: str, timeout_seconds: int = 60) -> tuple[str, dict]:
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel(_get_generation_model_name())
 
     def _call():
         generation_config = genai.types.GenerationConfig(
-            max_output_tokens=16000,
+            max_output_tokens=32000,   # Increased from 16000 — Gemini 2.5 supports more
             temperature=0.4,
         )
         response = model.generate_content(prompt, generation_config=generation_config)
+        raw_text = response.text
         usage = {
             "prompt_tokens": response.usage_metadata.prompt_token_count,
             "completion_tokens": response.usage_metadata.candidates_token_count,
             "total_tokens": response.usage_metadata.total_token_count,
             "model": _get_generation_model_name()
         }
-        return response.text, usage
+        return raw_text, usage
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_call)
@@ -502,20 +549,20 @@ def generate_learning_plan(prompt_or_context: str | dict) -> tuple[str, Optional
     - A context dict (OpenAI mode — builds its own user message)
 
     When LLM_PROVIDER=openai:
-      → Calls GPT-5 via openai_client.generate_learning_plan(context)
+      → Calls GPT-4o via openai_client.generate_learning_plan(context)
       → Returns JSON string of the plan dict for backward compatibility
       → Falls back to Gemini if OpenAI unavailable
 
     When LLM_PROVIDER=gemini:
       → Calls Gemini with the prompt string (legacy behaviour)
       → Returns raw text response
+      → Falls back to OpenAI if Gemini fails with JSONDecodeError
 
     Jobs/workers parse the returned string with _parse_plan_json().
     """
     if _use_openai():
         # OpenAI path: context dict expected; if a string was passed wrap it
         if isinstance(prompt_or_context, str):
-            # Legacy string prompt — pass as raw context with minimal fields
             logger.info("[LLM-ROUTER] OpenAI mode with raw string prompt (legacy call)")
             context = {"raw_prompt": prompt_or_context}
         else:
@@ -524,7 +571,6 @@ def generate_learning_plan(prompt_or_context: str | dict) -> tuple[str, Optional
         logger.info("[LLM-ROUTER] Using OpenAI (GPT-4o) for plan generation")
         try:
             plan_dict, usage = _generate_plan_via_openai(context)
-            # Return JSON string and usage for backward compat with _parse_plan_json() callers
             return json.dumps(plan_dict), usage
         except Exception as exc:
             logger.warning(
@@ -534,14 +580,32 @@ def generate_learning_plan(prompt_or_context: str | dict) -> tuple[str, Optional
             # Fall through to Gemini below
 
     # Gemini path (primary when LLM_PROVIDER=gemini, or as fallback)
-    # Resolve prompt_or_context to a string for Gemini
     if isinstance(prompt_or_context, dict):
         gemini_prompt = build_learning_plan_prompt(prompt_or_context)
     else:
         gemini_prompt = prompt_or_context
+
     logger.info("[LLM-ROUTER] Using Gemini for plan generation")
-    res, usage = _generate_content_with_timeout(gemini_prompt, timeout_seconds=180)
-    return res, usage
+    try:
+        res, usage = _generate_content_with_timeout(gemini_prompt, timeout_seconds=180)
+        # Quick validation — if Gemini response is not valid JSON, try repair
+        try:
+            json.loads(res)
+        except json.JSONDecodeError:
+            logger.warning("[LLM-ROUTER] Gemini returned invalid JSON — attempting repair")
+            res = _repair_truncated_json(res)
+        return res, usage
+    except Exception as gemini_exc:
+        logger.warning("[LLM-ROUTER] Gemini failed: %s — trying OpenAI as last resort", gemini_exc)
+        # Last resort: try OpenAI even if LLM_PROVIDER=gemini
+        if isinstance(prompt_or_context, dict):
+            try:
+                plan_dict, usage = _generate_plan_via_openai(prompt_or_context)
+                logger.info("[LLM-ROUTER] OpenAI last-resort succeeded")
+                return json.dumps(plan_dict), usage
+            except Exception as openai_exc:
+                logger.error("[LLM-ROUTER] OpenAI last-resort also failed: %s", openai_exc)
+        raise gemini_exc
 
 
 def analyze_target_jd(
