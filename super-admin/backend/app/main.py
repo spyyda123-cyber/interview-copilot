@@ -32,6 +32,7 @@ cors_origins.add("http://localhost:3002")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(cors_origins),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

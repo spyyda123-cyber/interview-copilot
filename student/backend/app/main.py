@@ -48,6 +48,7 @@ logger.info("[CORS] Allowed Origins: %s", cors_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,3 +101,38 @@ app.include_router(topic.router)
 @app.get("/health")
 def health_check() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/signup")
+def signup_fallback(payload: dict):
+    from app.db.session import get_db
+    from app.api.auth import signup
+    from app.schemas.auth import SignupRequest
+    
+    db_gen = get_db()
+    db = next(db_gen)
+    try:
+        return signup(SignupRequest(**payload), db)
+    finally:
+        try:
+            next(db_gen)
+        except StopIteration:
+            pass
+
+
+@app.post("/login")
+def login_fallback(payload: dict):
+    from app.db.session import get_db
+    from app.api.auth import login
+    from app.schemas.auth import LoginRequest
+    
+    db_gen = get_db()
+    db = next(db_gen)
+    try:
+        return login(LoginRequest(**payload), db)
+    finally:
+        try:
+            next(db_gen)
+        except StopIteration:
+            pass
+

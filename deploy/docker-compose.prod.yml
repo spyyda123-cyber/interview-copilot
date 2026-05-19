@@ -165,5 +165,17 @@ services:
       - admin-api
       - super-admin-api
 
+  # ─────────────────────────────────────────────────────────
+  # 5. SECURE HTTPS CLOUDFLARE TUNNEL
+  # ─────────────────────────────────────────────────────────
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: copilot_tunnel
+    restart: always
+    command: tunnel --url http://nginx:80
+    depends_on:
+      - nginx
+
 volumes:
   postgres_data:
+
