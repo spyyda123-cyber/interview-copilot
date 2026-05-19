@@ -131,17 +131,35 @@ export default function Sidebar() {
                 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 12px", borderRadius: 10, border: "none",
+                  padding: "10px 14px", borderRadius: 10, border: "none",
                   cursor: "pointer", width: "100%", textAlign: "left",
-                  background: active ? "#f3f3f3" : "transparent",
-                  color: active ? "#111111" : "#7B7B7B",
-                  fontSize: 13, fontWeight: active ? 700 : 500,
+                  background: active ? "#F1F5F9" : "transparent",
+                  color: active ? "#0F172A" : "#64748B",
+                  fontSize: 13, fontWeight: active ? 600 : 500,
                   transition: "all 0.15s ease",
                 }}
-                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="#F9F9F9"; (e.currentTarget as HTMLButtonElement).style.color="#111111"; } }}
-                onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; } }}
+                onMouseEnter={e => { 
+                  if (!active) { 
+                    (e.currentTarget as HTMLButtonElement).style.background="#F8FAFC"; 
+                    (e.currentTarget as HTMLButtonElement).style.color="#0F172A"; 
+                  } 
+                }}
+                onMouseLeave={e => { 
+                  if (!active) { 
+                    (e.currentTarget as HTMLButtonElement).style.background="transparent"; 
+                    (e.currentTarget as HTMLButtonElement).style.color="#64748B"; 
+                  } 
+                }}
               >
-                <div style={{ width:7, height:7, borderRadius:"50%", background: active ? "#D9FF57" : "transparent", border: active ? "none" : "1.5px solid #CECECE", flexShrink:0, transition:"all 0.15s" }} />
+                <div style={{ 
+                  width: 7, 
+                  height: 7, 
+                  borderRadius: "50%", 
+                  background: active ? "#D9FF57" : "transparent", 
+                  border: active ? "none" : "1.5px solid #94A3B8", 
+                  flexShrink: 0, 
+                  transition: "all 0.15s" 
+                }} />
                 <Icon />
                 <span>{label}</span>
               </button>
@@ -149,20 +167,26 @@ export default function Sidebar() {
           })}
 
           {/* Sign Out — directly below Study Plan, separated by a thin line */}
-          <div style={{ height:1, background:"#ECECEC", margin:"8px 4px" }} />
+          <div style={{ height: 1, background: "#E2E8F0", margin: "8px 4px" }} />
           <button
             onClick={handleSignOut}
             style={{
               display: "flex", alignItems: "center", gap: 10,
-              padding: "9px 12px", borderRadius: 10, border: "none",
+              padding: "10px 14px", borderRadius: 10, border: "none",
               cursor: "pointer", width: "100%", textAlign: "left",
-              background: "transparent", color: "#7B7B7B",
+              background: "transparent", color: "#64748B",
               fontSize: 13, fontWeight: 500, transition: "all 0.15s ease",
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background="#FFF0F0"; (e.currentTarget as HTMLButtonElement).style.color="#EF4444"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background="transparent"; (e.currentTarget as HTMLButtonElement).style.color="#7B7B7B"; }}
+            onMouseEnter={e => { 
+              (e.currentTarget as HTMLButtonElement).style.background="#FEF2F2"; 
+              (e.currentTarget as HTMLButtonElement).style.color="#EF4444"; 
+            }}
+            onMouseLeave={e => { 
+              (e.currentTarget as HTMLButtonElement).style.background="transparent"; 
+              (e.currentTarget as HTMLButtonElement).style.color="#64748B"; 
+            }}
           >
-            <div style={{ width:7, height:7, borderRadius:"50%", border:"1.5px solid #CECECE", flexShrink:0 }} />
+            <div style={{ width: 7, height: 7, borderRadius: "50%", border: "1.5px solid #94A3B8", flexShrink: 0 }} />
             <IconLogOut />
             <span>Sign Out</span>
           </button>
