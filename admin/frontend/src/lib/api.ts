@@ -1,405 +1,55 @@
-/**
- * API CLIENT - Interview Copilot Backend Integration
- *
- * This module provides all HTTP client functions for communicating with the backend API.
- *
- * CRITICAL SECURITY NOTES:
- * - Backend license binding relies on license_key being passed on every protected call
- * - All 403 responses trigger session cleanup and redirect to /license
- * - This is NOT JWT auth - license_key is the auth mechanism
- * - Every API call includes Content-Type header to prevent MIME type errors
- *
- * ERROR HANDLING:
- * - 403 Forbidden = License invalid/expired → Session cleared, redirect to /license
- * - 404 Not Found = Resource doesn't exist (student profile, target, etc)
- * - 500 Server Error = Backend issue (display to user)
- * - Timeout after 15 seconds = Network issue (display "Please try again")
- *
- * POLLING PATTERN:
- * - Plan generation is async (Celery worker runs in background)
- * - getPrepStatus is polled by frontend every 2-3 seconds
- * - Possible statuses: "generating" | "ready" | "failed" | "missing"
- * - Once "ready", call getLatestPrep to fetch the plan details
- *
- * SESSION STORAGE DEPENDENCY:
- * - Refer to app/docs/session-contract.ts for session key meanings
- * - Every protected page assumes student_id and license_key exist
- * - If either missing, ActivationGuard redirects to /license
- */
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8020";
 
-const getApiBaseUrl = () => {
-  const url = process.env.NEXT_PUBLIC_API_URL;
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
-  }
-  if (url.includes(":8000")) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL points to deprecated port 8000. Use backend port 8010."
-    );
-  }
-  return url;
+let tokenRef: string | null = null;
+
+export const setAuthToken = (token: string | null) => {
+  tokenRef = token;
 };
 
-const API_TIMEOUT_MS = 200000;
-
-type ApiError = {
-  message?: string;
-  detail?: string;
-};
-
-/**
- * Session keys to clear when user logs out or gets 403 response.
- * See app/docs/session-contract.ts for detailed explanation of each key.
- */
-const SESSION_KEYS_TO_CLEAR = [
-  "student_id",
-  "student_name",
-  "student_email",
-  "company_name",
-  "interview_date",
-  "role",
-  "target_id",
-  "resume_id",
-  "primary_skill",
-  "known_skills",
-  "support_mode",
-  "tone",
-  "coding_required",
-  "jd_text",
-] as const;
-
-const clearSessionAndRedirectToLicense = () => {
-  /**
-   * CRITICAL: Called when API returns 403 (license invalid/expired/not found)
-   *
-   * This function:
-   * 1. Clears ALL session storage keys (see SESSION_KEYS_TO_CLEAR)
-   * 2. Redirects user to /license page to re-activate
-   *
-   * Why:
-   * - 403 means backend rejected the license_key
-   * - Session state is now inconsistent with backend
-   * - User MUST re-activate with a valid license_key
-   * - Clearing session prevents stale data from causing downstream errors
-   *
-   * Used by: apiFetch when response.status === 403
-   * Side effects: Wipes all user data from sessionStorage, full page redirect
-   * Recovery: User enters valid license_key on /license page
-   */
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  SESSION_KEYS_TO_CLEAR.forEach((key) => {
-    window.sessionStorage.removeItem(key);
-  });
-
-  if (window.location.pathname !== "/login" && window.location.pathname !== "/signup") {
-    window.location.replace("/login");
-  }
-};
-
-export type ResumeUploadResponse = {
-  resume_id: number;
-  status: string;
-  missing_skills: string[];
-  ats_score: number;
-};
-
-export type StudentCreateResponse = {
-  student_id: number;
-};
-
-export type TargetAnalyzeResponse = {
-  target_id: number;
-  status: string;
-};
-
-export type TargetStatusResponse = {
-  target_id: number;
-  status: string;
-  error?: string | null;
-  required_skills?: string[];
-  difficulty?: string | null;
-  round_structure?: string | null;
-};
-
-export type PrepGenerateResponse = {
-  task_id: string;
-  status: string;
-};
-
-export type SubTopic = {
-  id: string;
-  title: string;
-};
-
-export type CurriculumTopic = {
-  id: string;
-  title: string;
-  description: string;
-  jd_relevance_note?: string;
-  difficulty: "easy" | "medium" | "hard";
-  mastery_time_minutes: number;
-  mastery_percent?: number;
-  status?: "not_started" | "in_progress" | "mastered";
-  is_critical_gap: boolean;
-  proficiency_tag: "advanced" | "intermediate" | "beginner" | "missing";
-  roi_label: "high" | "medium";
-  stage_id?: string;
-  sub_topics: SubTopic[];
-};
-
-export type CurriculumCategory = {
-  category_id: string;
-  category_title: string;
-  roi_label: "high" | "medium";
-  topics: CurriculumTopic[];
-};
-
-export type RoadmapStage = {
-  id: string;
-  title: string;
-  description: string;
-  status: "completed" | "active" | "locked" | "not_started";
-};
-
-export type LearningTask = {
-  id?: number;
-  day: number;
-  task_order: number;
-  title: string;
-  description: string;
-  duration_minutes: number;
-  task_type: "text" | "qa" | "code";
-  qa_pairs: {
-    question: string;
-    answer: string;
-    explanation: string;
-    transition_note?: string | null;
-  }[] | null;
-  quiz: {
-    question: string;
-    options: string[];
-    correct_index: number;
-    explanation: string;
-  }[] | null;
-  code_metadata: {
-    initial_code: string;
-    solution?: string;
-    test_cases: any;
-    language: string;
-    difficulty?: string;
-    examples?: any[];
-    constraints?: string[];
-    hint?: string;
-  } | null;
-};
-
-export type DailyPlanItem = {
-  day: number;
-  focus: string;
-  tasks: LearningTask[];
-};
-
-export type PlanDetailResponse = {
-  plan_id: number;
-  student_id: number;
-  company_name: string;
-  role: string;
-  days_available: number;
-  plan_json: {
-    // New Roadmap Engine format (Prompt 1)
-    student_name?: string;
-    company?: string;
-    role?: string;
-    target_readiness_score?: number;
-    days_left?: number;
-    roadmap_stages?: RoadmapStage[];
-    curriculum?: CurriculumCategory[];
-    weak_areas?: Array<string | { skill: string; reason: string }>;
-    high_roi_topic_ids?: string[];
-    ats_score?: number;
-    keyword_match_score?: number;
-    // Legacy daily_plan format (backward compat)
-    overview?: string;
-    daily_plan?: DailyPlanItem[];
-    resources?: string[];
-  };
-};
-
-export type PlanTaskStatusResponse = {
-  task_id: string;
-  status: string;
-};
-
-export type HealthResponse = {
-  status: string;
-};
-
-export type AuthResponse = {
-  student_id: number;
-  student_name?: string | null;
-  primary_skill?: string | null;
-};
-
-export type SystemStatusResponse = {
-  api: string;
-  database: string;
-  redis: string;
-  celery_worker: string;
-  openai_key: string;
-  details?: Record<string, string>;
-};
-
-// ── Feedback Types ──────────────────────────────────────────────
-export type FeedbackSubmitPayload = {
-  student_id: number;
-  company_name: string;
-  role: string;
-  interview_date: string; // ISO date string (YYYY-MM-DD)
-  experience_rating: string;
-  performance_rating: string;
-  course_relevance: boolean;
-  relevance_score: number;
-  out_of_box_questions?: string | null;
-  additional_notes?: string | null;
-};
-
-export type FeedbackResponse = {
-  id: number;
-  student_id: number;
-  company_name: string;
-  role: string;
-  interview_date: string;
-  experience_rating: string;
-  performance_rating: string;
-  course_relevance: boolean;
-  relevance_score: number;
-  out_of_box_questions?: string | null;
-  additional_notes?: string | null;
-  created_at: string;
-};
-
-export type PendingFeedbackItem = {
-  company_name: string;
-  role: string;
-  interview_date: string;
-};
-
-export type PendingFeedbackResponse = {
-  pending: PendingFeedbackItem[];
-  count: number;
-};
-
-// ── Placement & Profile Types ──────────────────────────────────────
-
-export type StudentProfileResponse = {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  department: string;
-  primary_skill?: string;
-  cgpa: number;
-  backlogs: number;
-  is_verified: boolean;
-};
-
-export type CompanyListItem = {
-  id: string;
-  company_name: string;
-  role: string;
-  package_min: number | null;
-  package_max: number | null;
-  interview_date: string | null;
-  min_cgpa: number | null;
-  max_backlogs: number | null;
-  eligible_departments: string[];
-  job_description: string | null;
-  status: string;
-  application_status: string | null;
-};
-
-export type PlacementListResponse = {
-  companies: CompanyListItem[];
-  total: number;
-};
-
-export type ApplicationItem = {
-  application_id: string;
-  company_id: string;
-  company_name: string;
-  role: string;
-  package_min: number | null;
-  package_max: number | null;
-  interview_date: string | null;
-  job_description: string | null;
-  application_status: string;
-  applied_at: string;
-};
-
-export type ApplicationListResponse = {
-  applications: ApplicationItem[];
-  total: number;
-};
-
-export type ActionResponse = {
-  status: string;
-  application_id?: string;
-  message: string;
-  company_name?: string;
-  role?: string;
-};
-
-const buildUrl = (path: string) => {
-  if (path.startsWith("http")) {
-    return path;
-  }
-  const baseUrl = getApiBaseUrl();
-  return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-};
-
-const parseErrorMessage = async (response: Response) => {
+const parseError = async (response: Response) => {
   try {
-    const data = (await response.json()) as ApiError;
-    return data.message ?? data.detail ?? "Request failed.";
+    const data = (await response.json()) as {
+      detail?: string | Array<{ msg?: string; loc?: Array<string | number> }> | { msg?: string };
+      message?: string;
+    };
+
+    if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((item) => {
+          const loc = Array.isArray(item.loc) ? item.loc.join(".") : "field";
+          return `${loc}: ${item.msg ?? "Invalid value"}`;
+        })
+        .filter(Boolean);
+      if (messages.length > 0) {
+        return messages.join("; ");
+      }
+    }
+
+    if (typeof data.detail === "object" && data.detail !== null && "msg" in data.detail) {
+      return data.detail.msg ?? "Request failed.";
+    }
+
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+
+    return data.message ?? "Request failed.";
   } catch {
     return "Request failed.";
   }
 };
 
 const apiFetch = async <T>(path: string, options?: RequestInit) => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    const isFormData = options?.body instanceof FormData;
-    
-    response = await fetch(buildUrl(path), {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        ...(isFormData ? {} : { "Accept": "application/json" }),  // Don't set Accept for FormData
-        ...(options?.headers ?? {}),
-      },
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("Request timed out. Please try again.");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options?.headers ?? {}),
+    },
+  });
 
   if (!response.ok) {
-    const message = await parseErrorMessage(response);
-    if (response.status === 403) {
-      clearSessionAndRedirectToLicense();
-    }
-    throw new Error(message);
+    throw new Error(await parseError(response));
   }
 
   if (response.status === 204) {
@@ -409,352 +59,528 @@ const apiFetch = async <T>(path: string, options?: RequestInit) => {
   return (await response.json()) as T;
 };
 
-export const uploadResume = async (
-  file: File,
-  metadata?: {
-    studentId?: number;
+export const authFetch = async <T>(path: string, options?: RequestInit) => {
+  if (!tokenRef) {
+    throw new Error("Missing auth token.");
   }
-) => {
-  const formData = new FormData();
-  if (metadata?.studentId !== undefined) {
-    formData.append("student_id", String(metadata.studentId));
-  }
-  formData.append("file", file);
 
-  return apiFetch<ResumeUploadResponse>("/resume/upload", {
-    method: "POST",
-    body: formData,
-  });
-};
-
-export const uploadMarksheet = async (
-  file: File,
-  metadata?: {
-    studentId?: number;
-  }
-) => {
-  const formData = new FormData();
-  if (metadata?.studentId !== undefined) {
-    formData.append("student_id", String(metadata.studentId));
-  }
-  formData.append("file", file);
-
-  return apiFetch<{id: number, file_path: string, file_name: string, file_type: string, created_at: string}>("/student/marksheets/upload", {
-    method: "POST",
-    body: formData,
-  });
-};
-
-export const createStudent = async (payload: {
-  first_name: string;
-  last_name: string;
-  phone: string;
-  department: string;
-  email: string;
-  primary_skill: string;
-  known_skills: { skill: string; proficiency: string }[];
-  support_mode: string;
-  tone: string;
-  coding_required: boolean;
-  marksheets?: any[];
-}) => {
-  /**
-   * Create student profile after license activation.
-   *
-   * ENDPOINT: POST /student/create
-   * REQUIRED FIELDS:
-   * - name: Student name (can be different from license holder)
-   * - email: Student email
-   * - primary_skill: Main technical skill (e.g., "Java")
-   * - known_skills: Array of already-known skills (e.g., ["Python", "SQL"])
-   * - support_mode: "guided" | "self" | "adaptive"
-   * - tone: "supportive" | "direct" | "neutral"
-   * - coding_required: boolean (include hands-on coding in plan?)
-   *
-   * RESPONSE: StudentCreateResponse
-   * - student_id: Backend student record ID (store in session)
-   *
-   * FAILURE MODES:
-   * - 400: Missing required fields
-   * - 409: Duplicate student profile (shouldn't happen per student_id)
-   *
-   * BACKEND BEHAVIOR:
-   * - Creates StudentProfile record with preferences
-   * - student_id is used for all future API calls
-   * - Preferences influence Gemini plan generation (tone, support_mode)
-   *
-   * Used by: /onboarding page (second step - personality/skill setup)
-   * Flow: /license → /onboarding (calls this) → /target (JD upload)
-   */
-  return apiFetch<StudentCreateResponse>("/student/create", {
-    method: "POST",
+  return apiFetch<T>(path, {
+    ...options,
     headers: {
-      "Content-Type": "application/json",
+      Authorization: `Bearer ${tokenRef}`,
+      ...(options?.headers ?? {}),
     },
-    body: JSON.stringify(payload),
   });
 };
 
-export const analyzeTarget = async (payload: {
-  student_id: number;
-  company_name: string;
-  role?: string | null;
-  jd_text: string;
-}) => {
-  return apiFetch<TargetAnalyzeResponse>("/target/analyze", {
+export type AdminLoginResponse = {
+  access_token?: string;
+  token_type?: string;
+  user_id?: string;
+  role?: string;
+  college_id?: string | null;
+  requires_password_setup?: boolean;
+  setup_token?: string;
+};
+
+export const login = (email: string, password: string) =>
+  apiFetch<AdminLoginResponse>("/auth/login", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
   });
-};
 
-export const getTargetStatus = async (targetId: number) => {
-  /**
-   * Poll job description analysis status.
-   *
-   * ENDPOINT: GET /target/status?target_id={targetId}
-   * REQUIRED PARAMS: targetId (from previous analyzeTarget call)
-   *
-   * RESPONSE: TargetStatusResponse
-   * - target_id: Echoes input target ID
-   * - status: "processing" | "done" | "error"
-   * - If status="done":
-   *   - required_skills: Extracted skills from JD (e.g., ["Python", "REST APIs"])
-   *   - difficulty: "entry" | "mid" | "senior"
-   *   - round_structure: Interview format (e.g., "phone screen + 2 coding rounds + system design")
-   * - If status="error":
-   *   - error: Error message explaining what went wrong
-   *
-   * POLLING PATTERN:
-   * - Call this function every 2 seconds after analyzeTarget
-   * - Stop when status becomes "done" or "error"
-   * - If error, display error message and let user retry
-   * - If done, proceed to generatePrep
-   *
-   * BACKEND ASYNC:
-   * - analyze_target_task runs in Celery worker
-   * - Calls Gemini to parse JD and extract requirements
-   * - Stores results in TargetInterview record
-   * - This endpoint just queries the current status
-   *
-   * Used by: /target page (during/after JD analysis)
-   */
-  return apiFetch<TargetStatusResponse>(`/target/status?target_id=${targetId}`);
-};
-
-export const generatePrep = async (student_id: number) => {
-  return apiFetch<PrepGenerateResponse>("/prep/generate", {
+export const logoutApi = () =>
+  apiFetch<{ status: string }>("/auth/logout", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      student_id,
-    }),
   });
-};
 
-export const signupStudent = async (payload: {
-  name: string;
-  email: string;
-  password: string;
-  roll_number?: string;
-  department?: string;
-  college?: string;
-}) => {
-  return apiFetch<AuthResponse>("/auth/signup", {
+export const setPassword = (setup_token: string, new_password: string) =>
+  apiFetch<{ status: string }>("/auth/set-password", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setup_token, new_password }),
   });
-};
 
-export const loginStudent = async (payload: {
-  email: string;
-  password: string;
-}) => {
-  return apiFetch<AuthResponse>("/auth/login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-};
+type Status = "ACTIVE" | "INACTIVE" | "PENDING";
 
-export const getLatestPrep = async (
-  studentId: number,
-  targetId: number
-) => {
-  return apiFetch<PlanDetailResponse>(
-    `/prep/latest/${studentId}?target_id=${targetId}`
-  );
-};
-
-export const getPrepStatus = async (
-  studentId: number,
-  targetId: number
-) => {
-  return apiFetch<PrepGenerateResponse>(
-    `/prep/status/${studentId}?target_id=${targetId}`
-  );
-};
-
-// ── Prompt 2 — Topic Learning Engine ─────────────────────────────────────────
-
-export type TopicContent = {
-  topic_id: string;
-  topic_name: string;
-  difficulty: string;
-  frequency_label: string;
-  mastery_time_minutes: number;
-  strategic_insights: string;
-  core_concepts: Array<{
-    id: string;
-    title: string;
-    summary: string;
-    content: {
-      intuition: string;
-      core_mechanics: string;
-      real_world_usage: string;
-      tradeoffs: string;
-      common_mistakes: string;
-      communication_tip: string;
-    };
-  }>;
-  interview_traps: Array<{ title: string; description: string }>;
-  practice_tasks: Array<{
-    id: string;
-    title: string;
-    task_type: "code" | "qa" | "mock";
-    duration_minutes: number;
-    difficulty: string;
-    problem_statement?: string;
-    method_signatures?: string[];
-    constraints?: string[];
-    hints?: string[];
-    time_complexity_target?: string;
-    space_complexity_target?: string;
-    test_cases?: Array<{ label: string; input: string; expected_output: string }>;
-    question?: string;
-    ideal_answer_points?: string[];
-    scenario?: string;
-    evaluation_criteria?: string[];
-  }>;
-  quiz: Array<{
-    question_text: string;
-    options: string[];
-    correct_option_index: number;
-    explanation: string;
-  }>;
-  visual_explanation: {
-    type: string;
-    title: string;
-    components: any[];
-    connections: any[];
-    rows: any[];
+export type DashboardSummary = {
+  token_pool: {
+    total_allocated: number;
+    total_consumed: number;
+    balance: number;
+    expiry_date: string | null;
   };
-  communication_tips: string[];
+  total_students: number;
+  active_students: number;
+  inactive_students: number;
+  low_token_alert: boolean;
+  total_companies: number;
+  active_companies: number;
+  pending_approvals: number;
+  recent_applications: Array<{
+    student_name: string;
+    student_email: string;
+    company_name: string;
+    role: string;
+    status: string;
+    applied_at: string;
+  }>;
+  active_companies_list: Array<{
+    id: string;
+    company_name: string;
+    role: string;
+    package_min: string | null;
+    package_max: string | null;
+    total_applied: number;
+    approved: number;
+  }>;
+  recent_activity: Array<{
+    student_name: string | null;
+    action_type: string;
+    tokens_used: number;
+    created_at: string;
+  }>;
 };
 
-export const getTopicContent = async (
-  studentId: number,
-  topicId: string,
-  targetId: number
-): Promise<TopicContent> => {
-  return apiFetch<TopicContent>(
-    `/topic/${studentId}/${topicId}?target_id=${targetId}`
+export type StudentListItem = {
+  id: string;
+  full_name: string;
+  email: string;
+  department: string | null;
+  graduation_year: number | null;
+  status: Status;
+  last_active_at: string | null;
+  access_expiry: string | null;
+  target_company: string | null;
+  target_role: string | null;
+};
+
+export type StudentListResponse = {
+  students: StudentListItem[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export type StudentDetail = {
+  id: string;
+  full_name: string;
+  email: string;
+  department: string | null;
+  graduation_year: number | null;
+  status: Status;
+  created_at: string;
+  last_active_at: string | null;
+  access_expiry: string | null;
+  per_action_breakdown: Array<{ action_type: string; tokens_used: number }>;
+  prep_details: {
+    target_company: string | null;
+    target_role: string | null;
+    prep_mode: string | null;
+    tone: string | null;
+    interview_date: string | null;
+  };
+  resume_summary: {
+    ats_score: number | null;
+    last_scan_at: string | null;
+  };
+  study_plan: {
+    completed_tasks: number;
+    total_tasks: number;
+    completion_percentage: number | null;
+  };
+};
+
+export type InviteResult = {
+  imported: number;
+  skipped: Array<{ email: string; reason: string }>;
+  error?: string | null;
+};
+
+export type BulkInvitePreview = {
+  valid_rows: Array<{
+    row: number;
+    full_name: string;
+    email: string;
+    phone?: string;
+    department?: string;
+    graduation_year?: number;
+  }>;
+  invalid_rows: Array<{ row: number; email?: string; errors: string[] }>;
+  total_valid: number;
+  total_invalid: number;
+};
+
+export type TokenPoolResponse = {
+  total_allocated: number;
+  total_consumed: number;
+  balance: number;
+  expiry_date: string | null;
+  student_allocations: Array<{
+    student_id: string;
+    name: string | null;
+    email: string | null;
+    status: Status;
+    allocated: number;
+    consumed: number;
+    balance: number;
+    cap: number | null;
+  }>;
+};
+
+export type ReadinessOverview = {
+  average_ats_score: number | null;
+  coding_completion_rate: number | null;
+  study_plan_completion: number | null;
+  top_target_companies: Array<{ name: string; count: number }>;
+  top_target_roles: Array<{ name: string; count: number }>;
+  students_not_started: number;
+};
+
+export type StudentDatabaseRecord = {
+  id: string;
+  college_id: string;
+  roll_no: string;
+  name: string;
+  department: string;
+  cgpa: number;
+  backlogs: number;
+  email: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StudentDatabaseListResponse = {
+  records: StudentDatabaseRecord[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export type UploadResult = {
+  imported: number;
+  skipped: number;
+  error?: string | null;
+};
+
+export async function getDashboardSummary() {
+  return authFetch<DashboardSummary>("/dashboard/summary");
+}
+
+export async function listStudents(params: {
+  search?: string;
+  status?: string;
+  target_company?: string;
+  target_role?: string;
+  sort_by?: string;
+  sort_dir?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      qs.set(key, String(value));
+    }
+  });
+  return authFetch<StudentListResponse>(`/students${qs.toString() ? `?${qs.toString()}` : ""}`);
+}
+
+export async function getStudent(id: string) {
+  return authFetch<StudentDetail>(`/students/${id}`);
+}
+
+export async function inviteStudents(emails: string[]) {
+  return authFetch<InviteResult>("/students/invite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emails }),
+  });
+}
+
+export async function bulkInvitePreview(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<BulkInvitePreview>("/students/bulk-invite/preview", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function bulkInviteConfirm(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<InviteResult>("/students/bulk-invite/confirm", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function listPendingStudents() {
+  return authFetch<StudentListResponse>("/students/pending");
+}
+
+export async function approveStudent(id: string) {
+  return authFetch<{ status: string }>(`/students/${id}/approve`, { method: "PATCH" });
+}
+
+export async function rejectStudent(id: string) {
+  return authFetch<{ status: string }>(`/students/${id}/reject`, { method: "PATCH" });
+}
+
+export async function toggleStudentStatus(id: string, status: "ACTIVE" | "INACTIVE") {
+  return authFetch<{ status: string }>(`/students/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function setStudentExpiry(id: string, date: string) {
+  return authFetch<{ status: string }>(`/students/${id}/expiry`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_expiry: date || null }),
+  });
+}
+
+export async function getTokenPool() {
+  return authFetch<TokenPoolResponse>("/tokens");
+}
+
+export async function getPoolBalance(): Promise<{ total_allocated: number; total_consumed: number; balance: number }> {
+  return authFetch<{ total_allocated: number; total_consumed: number; balance: number }>("/tokens/pool/balance");
+}
+
+export async function getReadinessOverview() {
+  return authFetch<ReadinessOverview>("/readiness");
+}
+
+const triggerBrowserDownload = (blob: Blob, fileName: string) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+};
+
+const downloadCsv = async (path: string, fileName: string) => {
+  if (!tokenRef) {
+    throw new Error("Missing auth token.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${tokenRef}`,
+      Accept: "text/csv",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const blob = await response.blob();
+  triggerBrowserDownload(blob, fileName);
+};
+
+export async function downloadStudentUsageReport() {
+  await downloadCsv("/reports/student-usage", "student_usage_report.csv");
+}
+
+export async function downloadInviteSummaryReport() {
+  await downloadCsv("/reports/invite-summary", "invite_summary_report.csv");
+}
+
+export async function downloadReadinessReport() {
+  await downloadCsv("/reports/readiness", "readiness_report.csv");
+}
+
+export async function getStudentDatabase(params: {
+  search?: string;
+  sort_by?: string;
+  sort_dir?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      qs.set(key, String(value));
+    }
+  });
+  return authFetch<StudentDatabaseListResponse>(`/student-db${qs.toString() ? `?${qs.toString()}` : ""}`);
+}
+
+export async function uploadStudentDatabase(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return authFetch<UploadResult>("/student-db/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+
+export type CompanyCreate = {
+  company_name: string;
+  role: string;
+  package_min?: number;
+  package_max?: number;
+  interview_date?: string;
+  min_cgpa?: number;
+  max_backlogs?: number;
+  eligible_departments: string[];
+  job_description?: string;
+  exemption_list?: string[];
+  status: string;
+};
+
+export type CompanyUpdate = Partial<CompanyCreate>;
+
+export type CompanyResponse = {
+  id: string;
+  college_id: string;
+  company_name: string;
+  role: string;
+  package_min?: number;
+  package_max?: number;
+  interview_date?: string;
+  min_cgpa?: number;
+  max_backlogs?: number;
+  eligible_departments: string[];
+  job_description?: string;
+  exemption_list: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+  interested_count: number;
+  approved_count: number;
+};
+
+export type CompanyListResponse = {
+  items: CompanyResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function listCompanies(page: number = 1, per_page: number = 20) {
+  return authFetch<CompanyListResponse>(`/companies?page=${page}&per_page=${per_page}`);
+}
+
+export async function createCompany(payload: CompanyCreate) {
+  return authFetch<CompanyResponse>('/companies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getCompany(id: string) {
+  return authFetch<CompanyResponse>(`/companies/${id}`);
+}
+
+export async function updateCompany(id: string, payload: CompanyUpdate) {
+  return authFetch<CompanyResponse>(`/companies/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Token Requests (Admin → Super Admin) ───────────────────────
+
+export type TokenRequestCreate = {
+  count: number;
+  note?: string;
+};
+
+export type TokenRequestResponse = {
+  id: string;
+  college_id: string;
+  count: number;
+  note?: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type TokenRequestListResponse = {
+  items: TokenRequestResponse[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function createTokenRequest(payload: TokenRequestCreate) {
+  return authFetch<TokenRequestResponse>('/token-requests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listTokenRequests(page: number = 1, per_page: number = 20) {
+  return authFetch<TokenRequestListResponse>(`/token-requests?page=${page}&per_page=${per_page}`);
+}
+
+// ── Placement Applications ─────────────────────────────────────
+
+export type ApplicationItem = {
+  application_id: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  department?: string | null;
+  company_id: string;
+  company_name: string;
+  role: string;
+  application_status: string;
+  applied_at: string;
+  cgpa?: number | null;
+  backlogs?: number | null;
+  roll_no?: string | null;
+  meets_cgpa?: boolean | null;
+  meets_backlogs?: boolean | null;
+  meets_dept?: boolean | null;
+};
+
+export type ApplicationListResponse = {
+  applications: ApplicationItem[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function listApplications(params: {
+  company_id?: string;
+  status?: string;
+  page?: number;
+  per_page?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params.company_id) qs.set('company_id', params.company_id);
+  if (params.status) qs.set('status', params.status);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.per_page) qs.set('per_page', String(params.per_page));
+  return authFetch<ApplicationListResponse>(`/applications${qs.toString() ? `?${qs.toString()}` : ''}`);
+}
+
+export async function approveApplication(applicationId: string) {
+  return authFetch<{ status: string; application_id: string }>(
+    `/applications/${applicationId}/approve`,
+    { method: 'PATCH' }
   );
-};
+}
 
-export const getStudentProfile = async (studentId: number) => {
-  return apiFetch<StudentProfileResponse>(`/student/${studentId}/profile`);
-};
-
-export const getHealth = async () => {
-  return apiFetch<any>("/health");
-};
-
-export const getSystemStatus = async () => {
-  return apiFetch<SystemStatusResponse>("/system/status");
-};
-
-export const generateCodeReport = async (payload: {
-  question: string;
-  code: string;
-  language: string;
-  test_results: any[];
-  concepts_in_course: string[];
-}) => {
-  return apiFetch<any>("/prep/code-report", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-};
-
-// ── Feedback API Functions ──────────────────────────────────────
-
-export const submitFeedback = async (payload: FeedbackSubmitPayload) => {
-  return apiFetch<FeedbackResponse>("/feedback/submit", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-};
-
-export const getPendingFeedbacks = async (studentId: number) => {
-  return apiFetch<PendingFeedbackResponse>(`/feedback/pending/${studentId}`);
-};
-
-export const getFeedbackByCompany = async (studentId: number, companyName: string) => {
-  return apiFetch<FeedbackResponse[]>(`/feedback/detail/${studentId}/${encodeURIComponent(companyName)}`);
-};
-
-export const getAllFeedbacks = async (studentId: number) => {
-  return apiFetch<FeedbackResponse[]>(`/feedback/all/${studentId}`);
-};
-
-// ── Placement & Profile API Functions ───────────────────────────────
-
-export const getPlacements = async (studentId: number) => {
-  return apiFetch<PlacementListResponse>(`/placement/companies?student_id=${studentId}`);
-};
-
-export const getStudentApplications = async (studentId: number) => {
-  return apiFetch<ApplicationListResponse>(`/placement/applications?student_id=${studentId}`);
-};
-
-export const markInterest = async (studentId: number, companyId: string) => {
-  return apiFetch<ActionResponse>("/placement/interest", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ student_id: studentId, company_id: companyId }),
-  });
-};
-
-export const activateCompany = async (studentId: number, companyId: string) => {
-  return apiFetch<ActionResponse>("/placement/activate", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ student_id: studentId, company_id: companyId }),
-  });
-};
-
-export const resetPrepPlan = async (studentId: number, targetId: number) => {
-  return apiFetch<PrepGenerateResponse>(`/prep/reset/${studentId}?target_id=${targetId}`, {
-    method: "DELETE",
-  });
-};
+export async function rejectApplication(applicationId: string) {
+  return authFetch<{ status: string; application_id: string }>(
+    `/applications/${applicationId}/reject`,
+    { method: 'PATCH' }
+  );
+}
