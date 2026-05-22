@@ -3043,7 +3043,12 @@ interface QuizQuestion {
 
 interface NavState {
   screen: Screen;
-  extra?: Record<string, unknown>;
+  extra?: Record<string, any>;
+  practiceTask?: any;
+  topicId?: any;
+  quizTopic?: any;
+  quizQuestions?: any;
+  onQuizComplete?: any;
 }
 
 export default function StudyPlanPage() {
@@ -3286,6 +3291,7 @@ export default function StudyPlanPage() {
   useEffect(() => {
     if (!studentId || !targetId) return;
     (async () => {
+      setPlanStatus("generating");
       try {
         const status = await getPrepStatus(studentId, targetId);
         if (status.status === "ready") {
@@ -3302,7 +3308,8 @@ export default function StudyPlanPage() {
           startPolling(studentId, targetId);
         }
       } catch {
-        setPlanStatus("idle");
+        setPlanStatus("failed");
+        setPlanError("Could not load study plan status. Please refresh the page.");
       }
     })();
     return () => stopPolling();
@@ -3560,7 +3567,7 @@ export default function StudyPlanPage() {
         {planStatus === "generating" && showGeneratingOverlay && (
           <div
             style={{
-              position: "absolute",
+              position: "fixed",
               top: 0,
               left: 0,
               right: 0,
