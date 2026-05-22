@@ -45,15 +45,19 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate a student."""
     normalized_email = _normalize_email(payload.email)
+    print(f"[AUTH-DEBUG] Login attempt: email='{normalized_email}', password='{payload.password}', length={len(payload.password)}", flush=True)
     
     student = db.query(Student).filter(Student.email.ilike(normalized_email)).first()
     if not student:
+        print(f"[AUTH-DEBUG] Student not found in database for email: '{normalized_email}'", flush=True)
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
     if not student.hashed_password:
+        print(f"[AUTH-DEBUG] Student has no hashed_password in database", flush=True)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if not verify_password(payload.password, student.hashed_password):
+        print(f"[AUTH-DEBUG] Password verification failed for student: '{normalized_email}'", flush=True)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     try:
