@@ -18,7 +18,7 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="sticky top-0 h-screen w-64 border-r border-[#f0f0f0] bg-[#fcfcfc] px-4 py-8 flex flex-col">
+    <aside className="fixed top-0 left-0 h-screen w-64 border-r border-[#f0f0f0] bg-[#fcfcfc] px-4 py-8 flex flex-col z-40 overflow-y-auto">
       <div className="px-2">
         <p className="text-[10px] font-medium tracking-[0.25em] text-[#9ca3af] uppercase">SPYYDA</p>
         <h2 className="mt-1 text-2xl font-bold text-[#111827]">College Admin</h2>

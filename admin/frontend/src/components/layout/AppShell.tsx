@@ -15,9 +15,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-[var(--color-surface-secondary)]">
+    <div className="flex bg-[var(--color-surface-secondary)] min-h-screen">
       <Sidebar />
-      <div className="flex-1">
+      <div className="flex-1 min-w-0 ml-64">
         <TopBar />
         <main className="p-6">{children}</main>
       </div>

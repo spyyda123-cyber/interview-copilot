@@ -73,7 +73,7 @@
  */
 "use client";
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 
@@ -98,41 +98,34 @@ export default function ActivationGuard({ children }: ActivationGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const subscribe = (callback: () => void) => {
-    if (typeof window === "undefined") {
-      return () => {};
-    }
-
-    const handler = () => callback();
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  };
-
-  const getSnapshot = () => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return Boolean(window.sessionStorage.getItem("student_id"));
-  };
-
-  const getServerSnapshot = () => false;
+  const [mounted, setMounted] = useState(false);
+  const [activated, setActivated] = useState(false);
 
   const isProtectedRoute = PROTECTED_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
 
-  const activated = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot
-  );
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
-    if (isProtectedRoute && !activated) {
-      router.replace("/login");
+    if (mounted) {
+      const isAuth = Boolean(window.sessionStorage.getItem("student_id"));
+      setActivated(isAuth);
+      if (isProtectedRoute && !isAuth) {
+        router.replace("/login");
+      }
     }
-  }, [activated, isProtectedRoute, router]);
+  }, [mounted, pathname, isProtectedRoute, router]);
+
+  // Prevent hydration mismatches on server/client renders
+  if (!mounted) {
+    if (isProtectedRoute) {
+      return null;
+    }
+    return <>{children}</>;
+  }
 
   const hideContent = isProtectedRoute && !activated;
 

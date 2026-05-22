@@ -77,6 +77,32 @@ const C = {
   limeBg:      "#f7ffe0",
 };
 
+const defaultFoundationTopics = [
+  { id: "java-fundamentals", title: "Java Fundamentals & Syntax", description: "Master variables, loops, control flow, and baseline language constructs.", proficiency_tag: "intermediate", roi_label: "high", difficulty: "easy" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "oop", title: "Object-Oriented Programming (OOP)", description: "Inheritance, polymorphism, encapsulation, and abstraction in design.", proficiency_tag: "intermediate", roi_label: "high", difficulty: "easy" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "basic-ds", title: "Basic Data Structures (Arrays, Lists)", description: "Understanding arrays, array lists, dynamic resizing, and sequential access.", proficiency_tag: "intermediate", roi_label: "high", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "complexity", title: "Time & Space Complexity Basics", description: "Analysing algorithms, Big-O notation, and scalability thresholds.", proficiency_tag: "intermediate", roi_label: "high", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "stacks-queues-basic", title: "Stacks & Queues Concept", description: "LIFO/FIFO mechanisms, standard interface operations, and call stacks.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "hashing-basics", title: "Hashing & HashTables Fundamentals", description: "Key-value pair mappings, bucket arrays, and simple hash collision policies.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "sorting-basic", title: "Sorting & Searching baseline", description: "Binary search mechanics, bubble/selection/insertion sort differences.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "recursion-basic", title: "Recursion & Base Cases", description: "Call stack utilization, recursive relation designs, and simple backtracking.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "exception-handling", title: "Exceptions & Memory Management", description: "Try-catch-finally control paths, checked/unchecked exception hierarchies.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+  { id: "db-basics", title: "Basic SQL & Relational Models", description: "SELECT queries, WHERE filters, basic JOIN statements, and tables.", proficiency_tag: "intermediate", roi_label: "medium", difficulty: "medium" as const, stage_id: "foundation", sub_topics: [] as any[] },
+];
+
+const defaultBehavioralTopics = [
+  { id: "conflict-resolution", title: "Conflict Resolution", description: "Handling disagreements within technical teams or managing manager misalignment productively.", roi_label: "high", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "team-leadership", title: "Team Leadership", description: "Fostering collaboration, leading sprint designs, mentoring junior engineers, and taking ownership.", roi_label: "high", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "culture-fit", title: "Culture Fit & Company Values", description: "Demonstrating growth mindset, customer obsession, and core leadership principles in scenario tests.", roi_label: "high", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "ethical-decision", title: "Ethical Decision Making", description: "Maintaining integrity in product designs, handling compliance concerns, and making principal calls.", roi_label: "high", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "pressure-outages", title: "Problem Solving under Pressure", description: "Dealing with production outages, high stakes service failures, and hard project deadlines.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "peer-feedback", title: "Delivering Peer Feedback", description: "Providing actionable constructive reviews, managing up, and receiving critical growth reviews.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "adaptability", title: "Adaptability & Ambiguity", description: "Pivoting in response to rapid strategy shifts or undefined scope conditions with poise.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "stakeholder-comm", title: "Stakeholder Management", description: "Communicating deeply complex technical concepts cleanly to non-technical partners.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "goal-setting", title: "Goal Setting & Initiative", description: "Establishing milestones, maintaining project accountability, and exhibiting extreme project ownership.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+  { id: "learning-failure", title: "Handling Failure & Mistake post-mortems", description: "Conducting post-mortems, extracting systemic improvements, and accepting accountability.", roi_label: "medium", difficulty: "medium" as const, stage_id: "behavioral", sub_topics: [] as any[] },
+];
+
 /* -----------------------------------------------------------------------------
  *  SVG ICONS
  * ----------------------------------------------------------------------------- */
@@ -208,17 +234,21 @@ function Screen0Foundation({
   role,
   dynamicPlan,
   studentId,
+  targetId,
   onNavigate,
   getTopicProgress,
   markTopicStarted,
+  getTopicLiveProgress,
 }: {
   company: string;
   role: string;
   dynamicPlan: PlanDetailResponse | null;
   studentId?: number | null;
+  targetId?: number | null;
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
   getTopicProgress: (topicId: string) => "not_started" | "started" | "completed";
   markTopicStarted: (topicId: string) => void;
+  getTopicLiveProgress: (topicId: string) => { pct: number; status: "queued" | "in-progress" | "completed" };
 }) {
   // Get foundation stage description from AI
   const foundationStage = dynamicPlan?.plan_json?.roadmap_stages?.find(
@@ -233,7 +263,13 @@ function Screen0Foundation({
 
   // Build foundation topics from AI curriculum — prefer stage_id="foundation" topics first,
   // then fall back to advanced/intermediate proficiency tags, then sessionStorage known skills
-  const allTopics = (dynamicPlan?.plan_json?.curriculum ?? []).flatMap(c => c.topics);
+  const allTopics = (dynamicPlan?.plan_json?.curriculum ?? []).flatMap(c => c.topics).filter(t => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
+    if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+    return true;
+  });
 
   // Primary: topics the AI explicitly placed in the foundation stage
   let profileSkillTopics = allTopics.filter(t => t.stage_id === "foundation");
@@ -261,7 +297,7 @@ function Screen0Foundation({
     if (matched) profileSkillTopics.unshift(matched);
   }
 
-  const foundationTopics = profileSkillTopics;
+  const foundationTopics = profileSkillTopics.length > 0 ? profileSkillTopics : defaultFoundationTopics;
   const weakAreas = dynamicPlan?.plan_json?.weak_areas ?? [];
 
   // profToMastery kept for progress bar color selection only (not for displaying numbers)
@@ -269,9 +305,11 @@ function Screen0Foundation({
 
   // avgMastery: count how many foundation topics the student actually COMPLETED (each = 100%)
   // NEVER use proficiency_tag as a mastery number — that is the student's baseline, not their progress
-  const completedCount = foundationTopics.filter(t => getTopicProgress(t.id) === "completed").length;
+  // avgMastery: count how many foundation topics the student actually COMPLETED (each = 100%)
+  // NEVER use proficiency_tag as a mastery number — that is the student's baseline, not their progress
+  const totalPct = foundationTopics.reduce((acc, t) => acc + getTopicLiveProgress(t.id).pct, 0);
   const avgMastery = foundationTopics.length > 0
-    ? Math.round((completedCount / foundationTopics.length) * 100)
+    ? Math.round(totalPct / foundationTopics.length)
     : 0;
 
   const foundationQuizQuestions = [
@@ -338,8 +376,8 @@ function Screen0Foundation({
 
       {/* Summary banner — only show Phase 1 Complete after quiz is actually done */}
       {(() => {
-        const quizDone = typeof window !== "undefined" && studentId
-          ? localStorage.getItem(`foundation_quiz_done_${studentId}`) === "true"
+        const quizDone = typeof window !== "undefined" && studentId && targetId
+          ? localStorage.getItem(`foundation_quiz_done_${studentId}_${targetId}`) === "true"
           : false;
         return quizDone ? (
           <div style={{ background: C.greenBg, border: `1px solid ${C.greenLight}`, borderRadius: 14, padding: "18px 22px", marginBottom: 28, display: "flex", alignItems: "center", gap: 16 }}>
@@ -381,12 +419,12 @@ function Screen0Foundation({
           <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 16px" }}>Your Existing Skills</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 32 }}>
             {foundationTopics.map((topic, i) => {
-              const progress = getTopicProgress(topic.id);
+              const live = getTopicLiveProgress(topic.id);
               // Real mastery: ONLY from actual topic completion — never from proficiency_tag
               // proficiency_tag tells us the student's STARTING level, not their completion
-              const displayMastery = progress === "completed" ? 100 : 0;
-              const isCompleted = progress === "completed";
-              const isStarted = progress === "started";
+              const displayMastery = live.pct;
+              const isCompleted = live.status === "completed";
+              const isStarted = live.status === "in-progress";
               return (
                 <div key={i} style={{ background: C.card, border: `1px solid ${isCompleted ? C.greenLight : C.border}`, borderRadius: 12, padding: "18px 20px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -467,7 +505,10 @@ function Screen1PrepPlan({
   onNavigate,
   generating,
   studentId,
+  targetId,
   getTopicProgress,
+  getTopicLiveProgress,
+  markTopicStarted,
 }: {
   dynamicPlan: PlanDetailResponse | null;
   company: string;
@@ -477,7 +518,10 @@ function Screen1PrepPlan({
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
   generating: boolean;
   studentId: number | null;
+  targetId: number | null;
   getTopicProgress: (topicId: string) => "not_started" | "started" | "completed";
+  getTopicLiveProgress: (topicId: string) => { pct: number; status: "queued" | "in-progress" | "completed" };
+  markTopicStarted: (topicId: string) => void;
 }) {
   // Support both new curriculum format and legacy daily_plan format
   const isNewFormat = !!(dynamicPlan?.plan_json?.curriculum);
@@ -486,10 +530,69 @@ function Screen1PrepPlan({
   const highRoiIds = dynamicPlan?.plan_json?.high_roi_topic_ids ?? [];
   const readinessFromPlan = dynamicPlan?.plan_json?.target_readiness_score;
 
+  // Get student's actual skills from sessionStorage (set during onboarding)
+  const primarySkill = typeof window !== "undefined" ? sessionStorage.getItem("primary_skill") ?? "" : "";
+  const knownSkillsRaw = typeof window !== "undefined" ? sessionStorage.getItem("known_skills") ?? "[]" : "[]";
+  let knownSkills: Array<{skill: string; proficiency: string}> = [];
+  try { knownSkills = JSON.parse(knownSkillsRaw); } catch { knownSkills = []; }
+
+  const allTopics = curriculum.flatMap(c => c.topics).filter(t => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
+    if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+    return true;
+  });
+  let profileSkillTopics = allTopics.filter(t => t.stage_id === "foundation");
+  if (profileSkillTopics.length === 0) {
+    profileSkillTopics = allTopics.filter(
+      t => t.proficiency_tag === "advanced" || t.proficiency_tag === "intermediate"
+    );
+  }
+  if (profileSkillTopics.length === 0 && knownSkills.length > 0) {
+    profileSkillTopics = allTopics.filter(t =>
+      knownSkills.some(ks =>
+        t.title.toLowerCase().includes(ks.skill.toLowerCase()) ||
+        ks.skill.toLowerCase().includes(t.title.toLowerCase())
+      )
+    );
+  }
+  if (primarySkill && !profileSkillTopics.some(t => t.title.toLowerCase().includes(primarySkill.toLowerCase()))) {
+    const matched = allTopics.find(t => t.title.toLowerCase().includes(primarySkill.toLowerCase()));
+    if (matched) profileSkillTopics.unshift(matched);
+  }
+  const foundationTopics = profileSkillTopics.length > 0 ? profileSkillTopics : defaultFoundationTopics;
+
+  const foundationCards = foundationTopics.slice(0, 4).map((topic) => {
+    const live = getTopicLiveProgress(topic.id);
+    return {
+      title: topic.title,
+      status: live.status,
+      progress: live.pct,
+      topicId: topic.id,
+    };
+  });
+
+  const defaultFoundationCards = [
+    { title: "Java Fundamentals & Syntax", status: "queued" as const, progress: 0, topicId: "java-fundamentals" },
+    { title: "Object-Oriented Programming (OOP)", status: "queued" as const, progress: 0, topicId: "oop" },
+    { title: "Basic Data Structures (Arrays, Lists)", status: "queued" as const, progress: 0, topicId: "basic-ds" },
+    { title: "Time & Space Complexity Basics", status: "queued" as const, progress: 0, topicId: "complexity" },
+  ];
+
+  const finalFoundationCards = foundationCards.length > 0 ? foundationCards : defaultFoundationCards;
+
   // AI-generated roadmap stages (from Prompt 1 output)
-  // Filter out any legacy gap/gaps-identification stages — removed from product
+  // Filter out any legacy gap/gaps-identification stages, System Design, and Mock Interview Simulation — removed from product
   const rawStages = (dynamicPlan?.plan_json?.roadmap_stages ?? []).filter(
-    s => !((s.id ?? "").toLowerCase().includes("gap") || (s.title ?? "").toLowerCase().includes("gap"))
+    s => {
+      const id = (s.id ?? "").toLowerCase();
+      const title = (s.title ?? "").toLowerCase();
+      if (id.includes("gap") || title.includes("gap")) return false;
+      if (id.includes("system") || id.includes("design") || title.includes("system design")) return false;
+      if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+      return true;
+    }
   );
 
   // Real progress tracking via localStorage
@@ -516,7 +619,7 @@ function Screen1PrepPlan({
 
     if (id.includes("foundation")) {
       // Foundation: completed after quiz done
-      const quizDone = typeof window !== "undefined" && localStorage.getItem(`foundation_quiz_done_${sid}`) === "true";
+      const quizDone = typeof window !== "undefined" && targetId && localStorage.getItem(`foundation_quiz_done_${sid}_${targetId}`) === "true";
       derivedStatus = quizDone ? "completed" : "active";
     } else if (id.includes("core-prep") || id.includes("core_prep") || id.includes("high-roi") || id.includes("high_roi") || id.includes("roi")) {
       // Core Prep: completed when all high_roi topics are completed
@@ -562,38 +665,25 @@ function Screen1PrepPlan({
   //   status="in-progress" → student opened it AND has actual task completion % stored
   //   status="completed"   → student explicitly completed all tasks
   //   progress %           → ONLY from coding_pct stored on actual submission, never from proficiency_tag
+  const allCurriculumTopics = curriculum.flatMap(cat => cat.topics).filter(t => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
+    if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+    return true;
+  });
+
   const topicCards = isNewFormat
     ? (() => {
-        const allTopics = curriculum.flatMap(cat => cat.topics);
         const highRoiTopics = highRoiIds.length > 0
-          ? highRoiIds.map(id => allTopics.find(t => t.id === id)).filter(Boolean) as typeof allTopics
-          : allTopics.filter(t => t.roi_label === "high").slice(0, 4);
+          ? highRoiIds.map(id => allCurriculumTopics.find(t => t.id === id)).filter(Boolean) as typeof allCurriculumTopics
+          : allCurriculumTopics.filter(t => t.roi_label === "high").slice(0, 4);
         return highRoiTopics.slice(0, 4).map((topic) => {
-          const trackingProgress = getTopicProgress(topic.id);
-          // Only read actual coding task completion — never fake a number
-          const codingPctRaw = (typeof window !== "undefined" && studentId)
-            ? localStorage.getItem(`coding_pct_${studentId}_${topic.id}`)
-            : null;
-          const tasksPctRaw = (typeof window !== "undefined" && studentId)
-            ? localStorage.getItem(`tasks_pct_${studentId}_${topic.id}`)
-            : null;
-          const actualPct = trackingProgress === "completed"
-            ? 100
-            : codingPctRaw
-              ? parseInt(codingPctRaw, 10)
-              : tasksPctRaw
-                ? parseInt(tasksPctRaw, 10)
-                : 0;
-          // Status derived strictly from actual activity — never from proficiency_tag
-          const cardStatus: "completed" | "in-progress" | "queued" =
-            trackingProgress === "completed" ? "completed" :
-            trackingProgress === "started" && actualPct > 0 ? "in-progress" :
-            trackingProgress === "started" ? "in-progress" :
-            "queued";
+          const live = getTopicLiveProgress(topic.id);
           return {
             title: topic.title,
-            status: cardStatus,
-            progress: actualPct,
+            status: live.status,
+            progress: live.pct,
             day: 1,
             tasks: [] as LearningTask[],
             allQuizQuestions: [] as Array<{question: string; options: string[]; correct_index: number; explanation: string}>,
@@ -608,11 +698,11 @@ function Screen1PrepPlan({
         // Legacy format: derive real progress from localStorage too
         const legacyId = day.focus.toLowerCase().replace(/\s+/g, "-");
         const trackProg = getTopicProgress(legacyId);
-        const codingRaw = (typeof window !== "undefined" && studentId)
-          ? localStorage.getItem(`coding_pct_${studentId}_${legacyId}`) : null;
-        const actualPct = trackProg === "completed" ? 100 : codingRaw ? parseInt(codingRaw, 10) : 0;
-        const cardSt: "completed" | "in-progress" | "queued" =
-          trackProg === "completed" ? "completed" : trackProg === "started" ? "in-progress" : "queued";
+        const codingRaw = (typeof window !== "undefined" && studentId && targetId)
+          ? localStorage.getItem(`coding_pct_${studentId}_${targetId}_${legacyId}`) : null;
+        const live = getTopicLiveProgress(legacyId);
+        const actualPct = live.pct;
+        const cardSt: "completed" | "in-progress" | "queued" = live.status;
         return {
           title: day.focus,
           status: cardSt,
@@ -626,6 +716,38 @@ function Screen1PrepPlan({
           subTopics: [] as Array<{id: string; title: string}>,
         };
       });
+
+  // Build behavioral topic cards from AI curriculum
+  const behavioralCards = allCurriculumTopics
+    .filter(t =>
+      t.id?.includes("behavioral") || t.id?.includes("star") || t.id?.includes("communication") ||
+      t.title?.toLowerCase().includes("behavioral") || t.title?.toLowerCase().includes("star") ||
+      t.title?.toLowerCase().includes("communication") || t.title?.toLowerCase().includes("leadership") ||
+      t.title?.toLowerCase().includes("hr") || t.title?.toLowerCase().includes("conflict") ||
+      t.title?.toLowerCase().includes("team") || t.title?.toLowerCase().includes("culture")
+    )
+    .slice(0, 4)
+    .map(topic => ({
+      title: topic.title,
+      status: "queued" as const,
+      topicId: topic.id,
+    }));
+
+  const finalBehavioralCards = (behavioralCards.length > 0
+    ? behavioralCards
+    : defaultBehavioralTopics.slice(0, 4).map(t => ({
+        title: t.title,
+        status: "queued" as const,
+        topicId: t.id,
+      }))).map(tc => {
+    const live = getTopicLiveProgress(tc.topicId);
+    return {
+      title: tc.title,
+      status: live.status,
+      progress: live.pct,
+      topicId: tc.topicId,
+    };
+  });
 
   return (
     <div className="sp-fade-up" style={{ maxWidth: 860, margin: "0 auto" }}>
@@ -668,12 +790,89 @@ function Screen1PrepPlan({
         {/* Vertical line */}
         <div style={{ position: "absolute" as const, left: 19, top: 24, bottom: 24, width: 2, background: `linear-gradient(to bottom, ${C.green}, ${C.purple}, ${C.border})`, borderRadius: 2 }} />
 
-        {/* Render AI roadmap stages if available, else show default 5-stage structure */}
+        {/* Render AI roadmap stages if available, else show default 3-stage structure */}
         {normalizedStages.length > 0 ? normalizedStages.map((stage, i) => {
           const isFoundation = stage.id === "foundation" || stage.title.toLowerCase().includes("foundation");
           const isCorePrepStage = stage.id === "core-prep" || stage.title.toLowerCase().includes("core prep") || stage.title.toLowerCase().includes("core-prep") || stage.id === "high-roi" || stage.id === "high-roi-topics";
-          const isSysDesign = stage.id === "system-design" || stage.id === "system-design-phase" || stage.title.toLowerCase().includes("system design");
           const isBehavioral = stage.id === "behavioral" || stage.id === "behavioral-leadership" || stage.title.toLowerCase().includes("behavioral") || stage.title.toLowerCase().includes("leadership");
+
+          // Every section gets an "Explore More" button; Foundation, Core Prep, and Behavioral also get topic cards
+          const stageExtra = (
+            <div style={{ marginTop: 14 }}>
+              {isFoundation && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                  {finalFoundationCards.map((tc, j) => (
+                    <TopicCard
+                      key={j}
+                      title={tc.title}
+                      status={tc.status}
+                      progress={tc.progress}
+                      onClick={() => {
+                        markTopicStarted(tc.topicId);
+                        onNavigate("topic", {
+                          topicTitle: tc.title,
+                          topicId: tc.topicId,
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              {isCorePrepStage && (
+                topicCards.length === 0 ? (
+                  <div style={{ color: C.textDim, fontSize: 13, marginBottom: 12 }}>
+                    {generating ? "Generating topics..." : "No topics yet."}
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    {topicCards.map((tc, j) => (
+                      <TopicCard
+                        key={j}
+                        title={tc.title}
+                        status={tc.status as "in-progress" | "queued" | "completed"}
+                        progress={tc.progress}
+                        onClick={() => {
+                          markTopicStarted(tc.topicId);
+                          onNavigate("topic", {
+                            topicTitle: tc.title,
+                            topicId: tc.topicId,
+                            topicDay: tc.day,
+                            topicTasks: tc.tasks,
+                            quizQuestions: tc.allQuizQuestions,
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
+                )
+              )}
+              {isBehavioral && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                  {finalBehavioralCards.map((tc, j) => (
+                    <TopicCard
+                      key={j}
+                      title={tc.title}
+                      status={tc.status}
+                      progress={tc.progress}
+                      onClick={() => {
+                        markTopicStarted(tc.topicId);
+                        onNavigate("topic", {
+                          topicTitle: tc.title,
+                          topicId: tc.topicId,
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => isFoundation ? onNavigate("foundation") : isBehavioral ? onNavigate("behavioral") : onNavigate("curriculum")}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                Explore More {Ico.arrowRight(12)}
+              </button>
+            </div>
+          );
 
           return (
             <PhaseRow
@@ -682,83 +881,86 @@ function Screen1PrepPlan({
               title={stage.title}
               status={stage.status as "completed" | "active" | "locked"}
               description={stage.description}
-              onClick={
-                isFoundation ? () => onNavigate("foundation") :
-                isSysDesign ? () => onNavigate("simulation") :
-                isBehavioral ? () => onNavigate("behavioral") :
-                undefined
-              }
-              extra={isCorePrepStage ? (
-                <div style={{ marginTop: 14 }}>
-                  {topicCards.length === 0 ? (
-                    <div style={{ color: C.textDim, fontSize: 13 }}>
-                      {generating ? "Generating topics..." : "No topics yet."}
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      {topicCards.map((tc, j) => (
-                        <TopicCard
-                          key={j}
-                          title={tc.title}
-                          status={tc.status as "in-progress" | "queued" | "completed"}
-                          progress={tc.progress}
-                          onClick={() => onNavigate("topic", {
-                            topicTitle: tc.title,
-                            topicId: tc.topicId,
-                            topicDay: tc.day,
-                            topicTasks: tc.tasks,
-                            quizQuestions: tc.allQuizQuestions,
-                          })}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => onNavigate("curriculum")}
-                    style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Explore More {Ico.arrowRight(12)}
-                  </button>
-                </div>
-              ) : undefined}
+              extra={stageExtra}
             />
           );
         }) : (
           <>
-            {/* Default 4-stage structure when no AI plan yet */}
+            {/* Default 3-stage structure when no AI plan yet — no System Design, no Mock Interview */}
             <PhaseRow index={1} title="Foundation" status="active"
               description="Baseline assessment of your existing skills against the target JD."
-              onClick={() => onNavigate("foundation")} />
+              extra={
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    {finalFoundationCards.map((tc, i) => (
+                      <TopicCard key={i} title={tc.title}
+                        status={tc.status}
+                        progress={tc.progress}
+                        onClick={() => {
+                          markTopicStarted(tc.topicId);
+                          onNavigate("topic", { topicTitle: tc.title, topicId: tc.topicId });
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <button onClick={() => onNavigate("foundation")}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    Explore More {Ico.arrowRight(12)}
+                  </button>
+                </div>
+              }
+            />
             <PhaseRow index={2} title="Core Prep" status="active" description=""
               extra={
                 <div style={{ marginTop: 14 }}>
                   {topicCards.length === 0 ? (
-                    <div style={{ color: C.textDim, fontSize: 13 }}>
+                    <div style={{ color: C.textDim, fontSize: 13, marginBottom: 12 }}>
                       {generating ? "Generating topics..." : "No topics yet. Generate a plan to get started."}
                     </div>
                   ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                       {topicCards.map((tc, i) => (
                         <TopicCard key={i} title={tc.title}
                           status={tc.status as "in-progress" | "queued" | "completed"}
                           progress={tc.progress}
-                          onClick={() => onNavigate("topic", { topicTitle: tc.title, topicId: tc.topicId, topicDay: tc.day, topicTasks: tc.tasks, quizQuestions: tc.allQuizQuestions })}
+                          onClick={() => {
+                            markTopicStarted(tc.topicId);
+                            onNavigate("topic", { topicTitle: tc.title, topicId: tc.topicId, topicDay: tc.day, topicTasks: tc.tasks, quizQuestions: tc.allQuizQuestions });
+                          }}
                         />
                       ))}
                     </div>
                   )}
                   <button onClick={() => onNavigate("curriculum")}
-                    style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                     Explore More {Ico.arrowRight(12)}
                   </button>
                 </div>
               }
             />
-            <PhaseRow index={3} title="System Design" status="locked"
-              description="End-to-end system design practice tailored to your target company engineering scale and interview format."
-              onClick={() => onNavigate("simulation")} />
-            <PhaseRow index={4} title="Behavioral & Leadership" status="locked"
-              description="Final phase — communication, leadership, and culture fit." />
+            <PhaseRow index={3} title="Behavioral & Leadership" status="active"
+              description="Final phase — communication, leadership philosophy, and culture fit simulations."
+              extra={
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    {finalBehavioralCards.map((tc, i) => (
+                      <TopicCard key={i} title={tc.title}
+                        status={tc.status}
+                        progress={tc.progress}
+                        onClick={() => {
+                          markTopicStarted(tc.topicId);
+                          onNavigate("topic", { topicTitle: tc.title, topicId: tc.topicId });
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <button onClick={() => onNavigate("behavioral")}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    Explore More {Ico.arrowRight(12)}
+                  </button>
+                </div>
+              }
+            />
           </>
         )}
       </div>
@@ -900,7 +1102,21 @@ function TopicCard({
 /* -----------------------------------------------------------------------------
  *  SCREEN 2 &mdash; CURRICULUM LIBRARY
  * ----------------------------------------------------------------------------- */
-function Screen2Curriculum({ onNavigate }: { onNavigate: (s: string, extra?: Record<string, unknown>) => void }) {
+function Screen2Curriculum({
+  dynamicPlan,
+  getTopicProgress,
+  studentId,
+  onNavigate,
+  getTopicLiveProgress,
+  markTopicStarted,
+}: {
+  dynamicPlan: PlanDetailResponse | null;
+  getTopicProgress: (topicId: string) => "not_started" | "started" | "completed";
+  studentId: number | null;
+  onNavigate: (s: string, extra?: Record<string, unknown>) => void;
+  getTopicLiveProgress: (topicId: string) => { pct: number; status: "queued" | "in-progress" | "completed" };
+  markTopicStarted: (topicId: string) => void;
+}) {
   const [filter, setFilter] = useState<"all" | "not-started" | "in-progress" | "mastered">("all");
 
   const filterTabs = [
@@ -910,18 +1126,59 @@ function Screen2Curriculum({ onNavigate }: { onNavigate: (s: string, extra?: Rec
     { key: "mastered", label: "Mastered" },
   ] as const;
 
-  const sysDesignTopics = [
-    { title: "High Scalability", time: "90min", mastery: 65, status: "in-progress" },
-    { title: "CAP Theorem", time: "45min", mastery: 0, status: "not-started" },
-    { title: "Sharding Strategies", time: "60min", mastery: 100, status: "mastered" },
-  ];
+  // Build categories from AI dynamic plan or default fallback
+  const rawCategories = (dynamicPlan?.plan_json?.curriculum ?? [
+    {
+      category: "Core Prep Data Structures & Algorithms",
+      topics: [
+        { id: "arrays-strings", title: "Array & String manipulation & Java fundamentals & OOP", description: "Master two-pointer technique, sliding window, and OOP principles in Java.", difficulty: "medium" },
+        { id: "linked-lists", title: "Linked Lists & Spring Boot basics", description: "Singly and doubly linked lists, fast & slow pointers, and basic Spring components.", difficulty: "medium" },
+        { id: "trees-graphs", title: "Trees & Graphs & Spring MVC", description: "BFS, DFS, binary search trees, MVC handlers, and routing.", difficulty: "hard" },
+        { id: "dynamic-programming", title: "Dynamic Programming & Spring Data JPA", description: "Memoization, tabulation, entity mapping, and repository patterns.", difficulty: "hard" },
+        { id: "stacks-queues", title: "Stacks & Queues & JUnit Testing", description: "LIFO/FIFO operations, queue implementation, and mock testing.", difficulty: "medium" },
+        { id: "sorting-searching", title: "Advanced Sorting & Searching", description: "Quick sort, merge sort, binary search patterns, and custom comparators.", difficulty: "medium" },
+      ]
+    },
+    {
+      category: "Advanced Backend Preparation",
+      topics: [
+        { id: "concurrency", title: "Java Concurrency & Multithreading", description: "Threads, synchronization, executors, and thread safety patterns.", difficulty: "hard" },
+        { id: "garbage-collection", title: "JVM Memory & Garbage Collection", description: "Understanding heap/stack memory, GC algorithms, and tuning.", difficulty: "hard" },
+      ]
+    }
+  ]) as any[];
 
-  const behavioralTopics = [
-    { title: "Conflict Resolution", time: "30min", roi: "High ROI" },
-    { title: "Systemic Impact", time: "45min", roi: "Med ROI" },
-    { title: "Decision Making", time: "25min", roi: "High ROI" },
-    { title: "Mentorship", time: "20min", roi: "Med ROI" },
-  ];
+  // Filter out system design, mock/simulation, and foundation topics (since foundation has its own explore page)
+  const filteredCategories = rawCategories.map(cat => {
+    const categoryName = (cat.category || cat.category_title || "").toLowerCase();
+    if (categoryName.includes("system") || categoryName.includes("design") || categoryName.includes("architecture")) {
+      return null;
+    }
+    const filteredTopics = (cat.topics || []).filter((t: any) => {
+      const id = (t.id ?? "").toLowerCase();
+      const title = (t.title ?? "").toLowerCase();
+      if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
+      if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+      if (t.stage_id === "foundation") return false;
+
+      // Apply filter tab
+      const live = getTopicLiveProgress(t.id);
+      const actualPct = live.pct;
+      const cardStatus = live.status === "completed" ? "mastered" : live.status === "in-progress" ? "in-progress" : "not-started";
+
+      if (filter === "not-started" && cardStatus !== "not-started") return false;
+      if (filter === "in-progress" && cardStatus !== "in-progress") return false;
+      if (filter === "mastered" && cardStatus !== "mastered") return false;
+
+      return true;
+    });
+
+    if (filteredTopics.length === 0) return null;
+    return {
+      ...cat,
+      topics: filteredTopics,
+    };
+  }).filter(Boolean) as any[];
 
   return (
     <div className="sp-fade-up" style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -952,99 +1209,42 @@ function Screen2Curriculum({ onNavigate }: { onNavigate: (s: string, extra?: Rec
         ))}
       </div>
 
-      {/* Section: System Design */}
-      <div style={{ marginBottom: 36 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: 0 }}>System Design & Architecture</h2>
-          <Badge label="CORE PREP" color={C.purpleLight} bg={C.purpleDim} />
+      {/* Render dynamic categories */}
+      {filteredCategories.length === 0 ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "24px 20px", textAlign: "center" }}>
+          <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>No topics found in this category.</p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-          {sysDesignTopics.map((t, i) => (
-            <CurriculumTopicCard
-              key={i}
-              title={t.title}
-              time={t.time}
-              mastery={t.mastery}
-              status={t.status as "in-progress" | "not-started" | "mastered"}
-              onClick={() => onNavigate("topic", { topicTitle: t.title })}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Section: Advanced DSA */}
-      <div style={{ marginBottom: 36 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: 0 }}>Advanced Data Structures & Algorithms</h2>
-          <Badge label="MEDIUM ROI" color={C.amber} bg={C.amberBg} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          {/* Featured card */}
-          <div
-            onClick={() => onNavigate("topic", { topicTitle: "Graph Theory Mastery" })}
-            style={{
-              background: `linear-gradient(135deg, #f7ffe0 0%, #edffd6 100%)`,
-              border: `1px solid #d9f36e`, borderRadius: 14, padding: "22px 20px",
-              cursor: "pointer", position: "relative" as const, overflow: "hidden",
-            }}
-          >
-            <div style={{ position: "absolute" as const, top: 0, right: 0, width: 120, height: 120, background: "radial-gradient(circle, rgba(217,243,110,0.4) 0%, transparent 70%)", borderRadius: "50%" }} />
-            <Badge label="NEW TRACK &bull; 12 Topics" color="#222222" bg="rgba(217,243,110,0.4)" />
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "12px 0 16px" }}>Graph Theory Mastery</h3>
-            <button style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: C.purple, border: "none", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-              Enroll in Track {Ico.arrowRight(12)}
-            </button>
-          </div>
-          {/* DP card */}
-          <div
-            onClick={() => onNavigate("topic", { topicTitle: "Dynamic Programming" })}
-            style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px 20px", cursor: "pointer" }}
-          >
-            <h3 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Dynamic Programming</h3>
-            <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, marginBottom: 16 }}>
-              {[["25 Patterns", C.purpleLight], ["15h Content", C.textMuted], ["High Difficulty", C.red]].map(([label, color]) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
-                  <span style={{ fontSize: 12, color: C.textMuted }}>{label}</span>
-                </div>
-              ))}
+      ) : (
+        filteredCategories.map((cat, idx) => (
+          <div key={idx} style={{ marginBottom: 36 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: 0 }}>{cat.category || cat.category_title}</h2>
+              <Badge label="CORE PREP" color={C.purpleLight} bg={C.purpleDim} />
             </div>
-            <button style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "none", border: `1px solid ${C.border}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-              Start Track {Ico.arrowRight(12)}
-            </button>
-          </div>
-        </div>
-      </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+              {cat.topics.map((t: any, i: number) => {
+                const live = getTopicLiveProgress(t.id);
+                const actualPct = live.pct;
+                const cardStatus = live.status === "completed" ? "mastered" : live.status === "in-progress" ? "in-progress" : "not-started";
 
-      {/* Section: Behavioral */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: 0 }}>Behavioral & Leadership</h2>
-          <button style={{ fontSize: 12, color: C.purpleLight, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>
-            View all 18 topics
-          </button>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          {behavioralTopics.map((t, i) => (
-            <div
-              key={i}
-              onClick={() => onNavigate("topic", { topicTitle: t.title })}
-              style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}
-            >
-              <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: "0 0 8px" }}>{t.title}</h4>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                {Ico.clock(11)}
-                <span style={{ fontSize: 11, color: C.textDim }}>{t.time}</span>
-              </div>
-              <Badge
-                label={t.roi}
-                color={t.roi.startsWith("High") ? C.purpleLight : C.amber}
-                bg={t.roi.startsWith("High") ? C.purpleDim : C.amberBg}
-              />
+                return (
+                  <CurriculumTopicCard
+                    key={i}
+                    title={t.title}
+                    time="60min"
+                    mastery={actualPct}
+                    status={cardStatus}
+                    onClick={() => {
+                      markTopicStarted(t.id);
+                      onNavigate("topic", { topicTitle: t.title, topicId: t.id });
+                    }}
+                  />
+                );
+              })}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -1092,6 +1292,56 @@ function CurriculumTopicCard({
 /* -----------------------------------------------------------------------------
  *  SCREEN 3 &mdash; TOPIC DETAIL (Prompt 2 &mdash; Topic Learning Engine)
  * ----------------------------------------------------------------------------- */
+function TopicLoadingStep({ step, currentStep, label }: { step: number; currentStep: number; label: string }) {
+  const isDone = step < currentStep;
+  const isActive = step === currentStep;
+
+  let indicatorBg = C.border;
+  let indicatorContent = null;
+  let opacity = 0.5;
+  let fontWeight = 400;
+
+  if (isDone) {
+    indicatorBg = C.greenLight;
+    indicatorContent = Ico.check(10, C.purple);
+    opacity = 1;
+  } else if (isActive) {
+    indicatorBg = C.purple;
+    indicatorContent = (
+      <div style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: C.greenLight,
+        animation: "pulse 1s infinite",
+      }} />
+    );
+    opacity = 1;
+    fontWeight = 600;
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, opacity, transition: "all 0.3s ease" }}>
+      <div style={{
+        width: 20,
+        height: 20,
+        borderRadius: "50%",
+        background: indicatorBg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        transition: "background 0.3s",
+      }}>
+        {indicatorContent}
+      </div>
+      <span style={{ fontSize: 13, color: C.text, fontWeight }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function Screen3TopicDetail({
   topicTitle,
   topicId,
@@ -1101,6 +1351,9 @@ function Screen3TopicDetail({
   markTopicStarted,
   markTopicCompleted,
   getTopicProgress,
+  getTopicLiveProgress,
+  studentId,
+  targetId,
 }: {
   topicTitle: string;
   topicId?: string;
@@ -1110,10 +1363,26 @@ function Screen3TopicDetail({
   markTopicStarted: (topicId: string) => void;
   markTopicCompleted: (topicId: string) => void;
   getTopicProgress: (topicId: string) => "not_started" | "started" | "completed";
+  getTopicLiveProgress: (topicId: string) => { pct: number; status: "queued" | "in-progress" | "completed" };
+  studentId: number | null;
+  targetId?: number | null;
 }) {
   const [topicContent, setTopicContent] = useState<TopicContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [topicLoadingStep, setTopicLoadingStep] = useState(0);
+
+  // Dynamic loader simulation for the premium overlay
+  useEffect(() => {
+    if (!loading) {
+      setTopicLoadingStep(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setTopicLoadingStep((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   // Mark topic as started when opened
   useEffect(() => {
@@ -1185,28 +1454,24 @@ function Screen3TopicDetail({
   })) ?? quizQuestions ?? [];
 
   return (
-    <div className="sp-fade-up" style={{ maxWidth: 900, margin: "0 auto" }}>
-      <Breadcrumb
-        items={[
-          { label: "Prep Plan", screen: "plan" },
-          { label: "Core Prep", screen: "plan" },
-          { label: topicTitle },
-        ]}
-        onNavigate={onNavigate}
-      />
-
-      {/* Loading state */}
-      {loading && (
-        <div style={{ background: C.purpleBg, border: `1px solid ${C.purpleDim}`, borderRadius: 12, padding: "20px 22px", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-            <div style={{ width: 18, height: 18, border: `2px solid ${C.purpleLight}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: C.purpleLight, fontWeight: 600 }}>Generating deep-dive content for {topicTitle}…</span>
-          </div>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: 0, paddingLeft: 30 }}>
-            AI is building core concepts, interview traps, practice tasks and quiz. This takes 30–60 seconds on first load — cached instantly after.
-          </p>
-        </div>
-      )}
+    <div className="sp-fade-up" style={{ maxWidth: 900, margin: "0 auto", position: "relative" }}>
+      {/* Container holding all topic content: blurred when loading */}
+      <div
+        style={{
+          filter: loading ? "blur(6px)" : "none",
+          pointerEvents: loading ? "none" : "auto",
+          userSelect: loading ? "none" : "auto",
+          transition: "filter 0.4s ease",
+        }}
+      >
+        <Breadcrumb
+          items={[
+            { label: "Prep Plan", screen: "plan" },
+            { label: "Core Prep", screen: "plan" },
+            { label: topicTitle },
+          ]}
+          onNavigate={onNavigate}
+        />
 
       {/* Error state */}
       {error && (
@@ -1242,12 +1507,17 @@ function Screen3TopicDetail({
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
           <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600 }}>Mastery Level</span>
           <span style={{ fontSize: 12, color: C.purpleLight, fontWeight: 700 }}>
-            {topicId ? (getTopicProgress(topicId) === "completed" ? "100%" : getTopicProgress(topicId) === "started" ? "In Progress" : "0%") : "0%"}
+            {topicId ? (() => {
+              const live = getTopicLiveProgress(topicId);
+              if (live.status === "completed") return "Completed ✓";
+              if (live.status === "in-progress") return `${live.pct}% (In Progress)`;
+              return "0% (Queued)";
+            })() : "0%"}
           </span>
         </div>
         <ProgressBar
-          pct={topicId ? (getTopicProgress(topicId) === "completed" ? 100 : getTopicProgress(topicId) === "started" ? 40 : 0) : 0}
-          color={topicId && getTopicProgress(topicId) === "completed" ? C.greenLight : C.purple}
+          pct={topicId ? getTopicLiveProgress(topicId).pct : 0}
+          color={topicId && getTopicLiveProgress(topicId).status === "completed" ? C.greenLight : C.purple}
           height={6}
         />
       </div>
@@ -1265,26 +1535,43 @@ function Screen3TopicDetail({
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 14px" }}>Core Concepts</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {coreConcepts.map((c, i) => (
-            <div
-              key={i}
-              onClick={() => !loading && onNavigate("concept", {
-                conceptTitle: c.title,
-                parentTopic: topicTitle,
-                topicId: topicId,
-                subTopicId: c.id,
-                topicContent: topicContent,
-                quizQuestions: aiQuizQuestions,
-              })}
-              style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px", cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1 }}
-            >
-              <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: "0 0 6px" }}>{c.title}</h4>
-              <p style={{ fontSize: 12, color: C.textDim, margin: "0 0 12px", lineHeight: 1.5 }}>{c.desc}</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: C.purpleLight }}>
-                Learn More {Ico.arrowRight(10)}
+          {coreConcepts.map((c, i) => {
+            const isRead = typeof window !== "undefined" && studentId && targetId && topicId
+              ? localStorage.getItem(`concept_read_${studentId}_${targetId}_${topicId}_${i}`) === "true"
+              : false;
+            return (
+              <div
+                key={i}
+                onClick={() => !loading && onNavigate("concept", {
+                  conceptTitle: c.title,
+                  parentTopic: topicTitle,
+                  topicId: topicId,
+                  subTopicId: c.id,
+                  conceptIndex: i,
+                  topicContent: topicContent,
+                  quizQuestions: aiQuizQuestions,
+                })}
+                style={{
+                  background: C.card,
+                  border: `1px solid ${isRead ? C.greenLight : C.border}`,
+                  borderRadius: 12,
+                  padding: "16px",
+                  cursor: loading ? "default" : "pointer",
+                  opacity: loading ? 0.6 : 1,
+                  position: "relative"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>{c.title}</h4>
+                  {isRead && <Badge label="Read ✓" color={C.greenLight} bg={C.greenBg} />}
+                </div>
+                <p style={{ fontSize: 12, color: C.textDim, margin: "0 0 12px", lineHeight: 1.5 }}>{c.desc}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: C.purpleLight }}>
+                  {isRead ? "Review" : "Learn More"} {Ico.arrowRight(10)}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -1313,8 +1600,7 @@ function Screen3TopicDetail({
           <div style={{ display: "flex", flexDirection: "column" as const, gap: 8, marginBottom: 14 }}>
             {practiceItems.map((p, i) => {
               const isCode = p.taskType === "code";
-              const studentId = typeof window !== "undefined" ? sessionStorage.getItem("student_id") : null;
-              const storedPct = (isCode && studentId && topicId) ? localStorage.getItem(`coding_pct_${studentId}_${topicId}`) : null;
+              const storedPct = (isCode && studentId && targetId && topicId) ? localStorage.getItem(`coding_pct_${studentId}_${targetId}_${topicId}`) : null;
               const pct = storedPct ? parseInt(storedPct) : 0;
 
               return (
@@ -1361,24 +1647,124 @@ function Screen3TopicDetail({
       </div>
 
       {/* Quiz CTA */}
-      {aiQuizQuestions.length > 0 && (
-        <div style={{ marginTop: 20, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h3 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: "0 0 4px" }}>Test Your Understanding</h3>
-            <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>{aiQuizQuestions.length} AI-generated questions for {topicTitle}</p>
+      {aiQuizQuestions.length > 0 && (() => {
+        const isQuizDone = typeof window !== "undefined" && studentId && targetId && topicId
+          ? localStorage.getItem(`quiz_done_${studentId}_${targetId}_${topicId}`) === "true"
+          : false;
+        return (
+          <div style={{ marginTop: 20, background: C.card, border: `1px solid ${isQuizDone ? C.greenLight : C.border}`, borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: "0 0 4px" }}>Test Your Understanding</h3>
+              <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>{aiQuizQuestions.length} AI-generated questions for {topicTitle}</p>
+            </div>
+            {isQuizDone ? (
+              <Badge label="Quiz Completed ✓" color={C.greenLight} bg={C.greenBg} />
+            ) : (
+              <button
+                onClick={() => {
+                  onNavigate("quiz", {
+                    quizTopic: topicTitle,
+                    quizQuestions: aiQuizQuestions,
+                    topicId: topicId,
+                    onQuizComplete: () => {
+                      if (studentId && targetId && topicId) {
+                        localStorage.setItem(`quiz_done_${studentId}_${targetId}_${topicId}`, "true");
+                        // If everything is done, mark the topic complete too!
+                        const conceptsReadCount = [0, 1, 2].filter(idx => localStorage.getItem(`concept_read_${studentId}_${targetId}_${topicId}_${idx}`) === "true").length;
+                        const codingPctRaw = localStorage.getItem(`coding_pct_${studentId}_${targetId}_${topicId}`);
+                        const codingPct = codingPctRaw ? parseInt(codingPctRaw, 10) : 0;
+                        if (conceptsReadCount === 3 && codingPct === 100) {
+                          localStorage.setItem(`topic_progress_${studentId}_${targetId}_${topicId}`, "completed");
+                        } else {
+                          localStorage.setItem(`topic_progress_${studentId}_${targetId}_${topicId}`, "started");
+                        }
+                      }
+                    },
+                  });
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px", borderRadius: 10, background: C.purple, border: "none", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                {Ico.book(13)} Take Quiz
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => {
-              onNavigate("quiz", {
-                quizTopic: topicTitle,
-                quizQuestions: aiQuizQuestions,
-                onQuizComplete: () => { if (topicId) markTopicCompleted(topicId); },
-              });
+        );
+      })()}
+      </div>
+
+      {/* Premium Blur Overlay for Topic Generation */}
+      {loading && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(243, 243, 243, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "40px 24px",
+            minHeight: "450px"
+          }}
+        >
+          <div
+            className="sp-fade-up"
+            style={{
+              background: C.white,
+              border: `1.5px solid ${C.border}`,
+              borderRadius: 20,
+              padding: "40px 32px",
+              maxWidth: 480,
+              width: "100%",
+              boxShadow: "0 24px 48px rgba(0, 0, 0, 0.08)",
+              textAlign: "center",
+              backdropFilter: "blur(20px)",
+              animation: "fadeInUp 0.4s ease both",
             }}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px", borderRadius: 10, background: C.purple, border: "none", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
           >
-            {Ico.book(13)} Take Quiz
-          </button>
+            {/* Spinner & Zap */}
+            <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 24px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{
+                position: "absolute",
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: C.greenBg,
+                border: `2px solid ${C.greenLight}`,
+                animation: "pulse 2s infinite ease-in-out",
+              }} />
+              <div style={{
+                position: "absolute",
+                width: 60,
+                height: 60,
+                borderRadius: "50%",
+                border: `3px dashed ${C.purple}`,
+                borderTopColor: "transparent",
+                animation: "spin 1.2s linear infinite",
+              }} />
+              <div style={{ fontSize: 24, zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>⚡</div>
+            </div>
+
+            {/* Title */}
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 10px", letterSpacing: "-0.3px" }}>
+              Generating Topic Deep-Dive
+            </h2>
+            <p style={{ fontSize: 13, color: C.textMuted, margin: "0 0 28px", lineHeight: 1.5 }}>
+              AI is curating core concepts, analyzing high-yield interview traps, compiling practice tasks, and custom-generating the topic quiz.
+            </p>
+
+            {/* Dynamic Step Loader inside the card */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, textAlign: "left", padding: "0 8px" }}>
+              <TopicLoadingStep step={0} currentStep={topicLoadingStep} label="Initializing topic deep-dive..." />
+              <TopicLoadingStep step={1} currentStep={topicLoadingStep} label="Formulating strategic insights..." />
+              <TopicLoadingStep step={2} currentStep={topicLoadingStep} label="Structuring core concepts & mechanics..." />
+              <TopicLoadingStep step={3} currentStep={topicLoadingStep} label="Compiling interview traps & practice tasks..." />
+              <TopicLoadingStep step={4} currentStep={topicLoadingStep} label="Finalizing custom quiz..." />
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1396,6 +1782,11 @@ function Screen4ConceptDetail({
   subTopicId,
   quizQuestions,
   onNavigate,
+  topicId,
+  conceptIndex,
+  studentId,
+  targetId,
+  onConceptRead,
 }: {
   conceptTitle: string;
   parentTopic: string;
@@ -1404,11 +1795,33 @@ function Screen4ConceptDetail({
   subTopicId?: string;
   quizQuestions?: Array<{question: string; options: string[]; correct_index: number; explanation: string}>;
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
+  topicId?: string;
+  conceptIndex?: number;
+  studentId?: number | null;
+  targetId?: number | null;
+  onConceptRead?: () => void;
 }) {
   // Find the specific sub-topic content from Prompt 2 output
   const subTopicContent = topicContent?.core_concepts?.find(
     c => c.id === subTopicId || c.title === conceptTitle
   );
+
+  // Mark concept read on mount
+  useEffect(() => {
+    if (studentId && targetId && topicId && typeof conceptIndex === "number") {
+      const key = `concept_read_${studentId}_${targetId}_${topicId}_${conceptIndex}`;
+      if (localStorage.getItem(key) !== "true") {
+        localStorage.setItem(key, "true");
+        if (onConceptRead) onConceptRead();
+        
+        // Also ensure topic status shifts from QUEUED to IN PROGRESS since student started learning
+        const topicKey = `topic_progress_${studentId}_${targetId}_${topicId}`;
+        if (!localStorage.getItem(topicKey)) {
+          localStorage.setItem(topicKey, "started");
+        }
+      }
+    }
+  }, [studentId, targetId, topicId, conceptIndex, onConceptRead]);
 
   // Build Core Mechanics from Prompt 2 core_concept.content
   const aiMechanics = subTopicContent?.content
@@ -1786,6 +2199,7 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
   const INITIAL_VISIBLE = 2;
 
   const [studentId, setStudentId] = useState<number | null>(null);
+  const [targetId, setTargetId] = useState<number | null>(null);
   const [selectedLang, setSelectedLang] = useState<keyof typeof LANGUAGE_CONFIGS>("python");
   const [code, setCode] = useState(() =>
     LANGUAGE_CONFIGS.python.starter(problemTitle, practiceTask?.method_signatures)
@@ -1801,6 +2215,8 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
   useEffect(() => {
     const sid = sessionStorage.getItem("student_id");
     if (sid) setStudentId(Number(sid));
+    const tid = sessionStorage.getItem("target_id");
+    if (tid) setTargetId(Number(tid));
   }, []);
 
   useEffect(() => {
@@ -1873,24 +2289,27 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
 
   const handleSubmitSection = () => {
     setSubmitted(true);
-    if (studentId && topicId) {
+    if (studentId && targetId && topicId) {
       // Save coding progress percentage in localStorage
-      localStorage.setItem(`coding_pct_${studentId}_${topicId}`, String(progressPct));
-      localStorage.setItem(`coding_passed_${studentId}_${topicId}`, String(passedCount));
-      localStorage.setItem(`coding_total_${studentId}_${topicId}`, String(allTestCases.length));
+      localStorage.setItem(`coding_pct_${studentId}_${targetId}_${topicId}`, String(progressPct));
+      localStorage.setItem(`coding_passed_${studentId}_${targetId}_${topicId}`, String(passedCount));
+      localStorage.setItem(`coding_total_${studentId}_${targetId}_${topicId}`, String(allTestCases.length));
       
-      // If all tests passed, mark topic completed. Else mark it started.
-      if (allTestsPassed) {
-        localStorage.setItem(`topic_progress_${studentId}_${topicId}`, "completed");
+      // Calculate overall completeness to set topic progress correctly
+      const conceptsReadCount = [0, 1, 2].filter(idx => localStorage.getItem(`concept_read_${studentId}_${targetId}_${topicId}_${idx}`) === "true").length;
+      const quizDone = localStorage.getItem(`quiz_done_${studentId}_${targetId}_${topicId}`) === "true";
+      
+      if (conceptsReadCount === 3 && progressPct === 100 && quizDone) {
+        localStorage.setItem(`topic_progress_${studentId}_${targetId}_${topicId}`, "completed");
       } else {
-        localStorage.setItem(`topic_progress_${studentId}_${topicId}`, "started");
+        localStorage.setItem(`topic_progress_${studentId}_${targetId}_${topicId}`, "started");
       }
     }
     onNavigate("topic");
   };
 
   return (
-    <div className="sp-fade-up" style={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column" as const }}>
+    <div className="sp-fade-up" style={{ minHeight: "calc(100vh - 160px)", display: "flex", flexDirection: "column" as const }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2196,11 +2615,15 @@ function ScreenBehavioral({
   role,
   dynamicPlan,
   onNavigate,
+  getTopicLiveProgress,
+  markTopicStarted,
 }: {
   company: string;
   role: string;
   dynamicPlan: PlanDetailResponse | null;
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
+  getTopicLiveProgress: (topicId: string) => { pct: number; status: "queued" | "in-progress" | "completed" };
+  markTopicStarted: (topicId: string) => void;
 }) {
   // Get behavioral stage from AI plan
   const behavioralStage = dynamicPlan?.plan_json?.roadmap_stages?.find(
@@ -2208,13 +2631,20 @@ function ScreenBehavioral({
   );
 
   // Get behavioral topics from AI curriculum
-  const allTopics = (dynamicPlan?.plan_json?.curriculum ?? []).flatMap(c => c.topics);
+  const allTopics = (dynamicPlan?.plan_json?.curriculum ?? []).flatMap(c => c.topics).filter(t => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
+    if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
+    return true;
+  });
   const behavioralTopics = allTopics.filter(t =>
     t.id?.includes("behavioral") || t.id?.includes("star") || t.id?.includes("communication") ||
     t.title?.toLowerCase().includes("behavioral") || t.title?.toLowerCase().includes("star") ||
     t.title?.toLowerCase().includes("communication") || t.title?.toLowerCase().includes("leadership") ||
     t.title?.toLowerCase().includes("hr")
   );
+  const finalBehavioralTopics = behavioralTopics.length > 0 ? behavioralTopics : defaultBehavioralTopics;
 
   const starQuestions = [
     { question: "Tell me about yourself.", hint: "Present -> Past -> Future. 60-90 seconds." },
@@ -2245,18 +2675,21 @@ function ScreenBehavioral({
             {behavioralStage?.description ?? "STAR story preparation, communication calibration, and culture fit signals."}
           </p>
         </div>
-        <Badge label="Phase 5" color={C.purpleLight} bg={C.purpleDim} />
+        <Badge label="Phase 3" color={C.purpleLight} bg={C.purpleDim} />
       </div>
 
       {/* Behavioral topics from AI curriculum */}
-      {behavioralTopics.length > 0 && (
+      {finalBehavioralTopics.length > 0 && (
         <div style={{ marginBottom: 28 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 14px" }}>Behavioral Topics</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-            {behavioralTopics.map((topic, i) => (
+            {finalBehavioralTopics.map((topic, i) => (
               <div
                 key={i}
-                onClick={() => onNavigate("topic", { topicTitle: topic.title, topicId: topic.id })}
+                onClick={() => {
+                  markTopicStarted(topic.id);
+                  onNavigate("topic", { topicTitle: topic.title, topicId: topic.id });
+                }}
                 style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 18px", cursor: "pointer" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; }}
@@ -2266,9 +2699,25 @@ function ScreenBehavioral({
                   <Badge label={topic.roi_label === "high" ? "High ROI" : "Medium ROI"} color={topic.roi_label === "high" ? C.purpleLight : C.amber} bg={topic.roi_label === "high" ? C.purpleDim : C.amberBg} />
                 </div>
                 <p style={{ fontSize: 12, color: C.textDim, margin: "0 0 10px", lineHeight: 1.5 }}>{topic.description}</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: C.purpleLight }}>
-                  Study Now {Ico.arrowRight(10)}
-                </div>
+                {(() => {
+                  const live = getTopicLiveProgress(topic.id);
+                  if (live.status === "completed") {
+                    return <Badge label="Completed ✓" color={C.greenLight} bg={C.greenBg} />;
+                  } else if (live.status === "in-progress") {
+                    return (
+                      <div style={{ width: "100%", marginTop: 4, marginBottom: 8 }}>
+                        <ProgressBar pct={live.pct} color={C.purple} />
+                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{live.pct}% complete</div>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: C.purpleLight }}>
+                        Study Now {Ico.arrowRight(10)}
+                      </div>
+                    );
+                  }
+                })()}
               </div>
             ))}
           </div>
@@ -2297,22 +2746,6 @@ function ScreenBehavioral({
         </div>
       </div>
 
-      {/* Practice CTA */}
-      <div style={{ background: "linear-gradient(135deg, #f7ffe0 0%, #edffd6 100%)", border: `1px solid #d9f36e`, borderRadius: 14, padding: "20px 22px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          {Ico.play(14)}
-          <h3 style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0 }}>Practice Mock Interview</h3>
-        </div>
-        <p style={{ fontSize: 13, color: C.textMuted, margin: "0 0 14px", lineHeight: 1.6 }}>
-          Practice your behavioral answers with a live AI simulation tailored to {company}.
-        </p>
-        <button
-          onClick={() => onNavigate("simulation")}
-          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 8, background: C.purple, border: "none", color: C.white, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-        >
-          Start Mock Interview {Ico.arrowRight(12)}
-        </button>
-      </div>
     </div>
   );
 }
@@ -2324,10 +2757,12 @@ function Screen7Quiz({
   quizTopic,
   quizQuestions,
   onNavigate,
+  onQuizComplete,
 }: {
   quizTopic: string;
   quizQuestions?: Array<{question: string; options: string[]; correct_index: number; explanation: string}>;
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
+  onQuizComplete?: () => void;
 }) {
   // Use AI-generated questions if available &mdash; no hardcoded fallback (topic-agnostic)
   const fallbackQuestions = [
@@ -2382,6 +2817,12 @@ function Screen7Quiz({
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
   const [answers, setAnswers] = useState<(number | null)[]>(new Array(activeQuestions.length).fill(null));
+
+  useEffect(() => {
+    if (finished) {
+      onQuizComplete?.();
+    }
+  }, [finished, onQuizComplete]);
 
   const q = activeQuestions[currentQ];
 
@@ -2455,7 +2896,7 @@ function Screen7Quiz({
         /* -- Results screen -- */
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: "36px 32px", textAlign: "center" }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>
-            {pct >= 80 ? "ðŸŽ‰" : pct >= 60 ? "ðŸ‘" : "ðŸ“š"}
+            {pct >= 80 ? "ðŸŽ‰" : pct >= 60 ? "ðŸ‘ " : "ðŸ“š"}
           </div>
           <h2 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: "0 0 8px" }}>
             {pct >= 80 ? "Excellent!" : pct >= 60 ? "Good Progress!" : "Keep Studying!"}
@@ -2602,19 +3043,7 @@ interface QuizQuestion {
 
 interface NavState {
   screen: Screen;
-  topicTitle?: string;
-  topicDay?: number;
-  topicTasks?: LearningTask[];
-  conceptTitle?: string;
-  parentTopic?: string;
-  conceptTask?: LearningTask | null;
-  quizTopic?: string;
-  quizQuestions?: QuizQuestion[];
-  // Prompt 2 data
-  topicId?: string;
-  topicContent?: TopicContent | null;
-  subTopicId?: string;
-  practiceTask?: TopicContent["practice_tasks"][0] | null;
+  extra?: Record<string, unknown>;
 }
 
 export default function StudyPlanPage() {
@@ -2629,32 +3058,12 @@ export default function StudyPlanPage() {
   // -- Topic progress tracking (localStorage) — reactive via progressVersion --
   const [progressVersion, setProgressVersion] = useState(0);
 
-  const markTopicStarted = useCallback((topicId: string) => {
-    if (!studentId || !topicId) return;
-    const key = `topic_progress_${studentId}_${topicId}`;
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, "started");
-      setProgressVersion(v => v + 1);
-    }
-  }, [studentId]);
-
-  const markTopicCompleted = useCallback((topicId: string) => {
-    if (!studentId || !topicId) return;
-    localStorage.setItem(`topic_progress_${studentId}_${topicId}`, "completed");
-    setProgressVersion(v => v + 1);
-  }, [studentId]);
-
-  const getTopicProgress = useCallback((topicId: string): "not_started" | "started" | "completed" => {
-    if (!studentId || !topicId) return "not_started";
-    const val = localStorage.getItem(`topic_progress_${studentId}_${topicId}`);
-    return (val as "not_started" | "started" | "completed") ?? "not_started";
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studentId, progressVersion]);
-
   // -- Plan state --
   const [dynamicPlan, setDynamicPlan] = useState<PlanDetailResponse | null>(null);
   const [planStatus, setPlanStatus] = useState<"idle" | "generating" | "ready" | "failed">("idle");
   const [planError, setPlanError] = useState<string | null>(null);
+  // -- Whether the generating overlay is visible (can be dismissed while generation continues) --
+  const [showGeneratingOverlay, setShowGeneratingOverlay] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // -- Navigation state --
@@ -2666,6 +3075,158 @@ export default function StudyPlanPage() {
   // -- Countdown (days left) --
   const [daysLeft, setDaysLeft] = useState(14);
 
+  // -- Active loading step for generating state overlay --
+  const [loadingStepIndex, setLoadingStepIndex] = useState(0);
+
+  // -- Show overlay again whenever a new generation starts --
+  // Resets the overlay visibility whenever planStatus changes to generating
+  useEffect(() => {
+    if (planStatus === "generating") setShowGeneratingOverlay(true);
+  }, [planStatus]);
+
+  const markTopicStarted = useCallback((topicId: string) => {
+    if (!studentId || !targetId || !topicId) return;
+    const key = `topic_progress_${studentId}_${targetId}_${topicId}`;
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, "started");
+      setProgressVersion(v => v + 1);
+    }
+  }, [studentId, targetId]);
+
+  const markTopicCompleted = useCallback((topicId: string) => {
+    if (!studentId || !targetId || !topicId) return;
+    localStorage.setItem(`topic_progress_${studentId}_${targetId}_${topicId}`, "completed");
+    setProgressVersion(v => v + 1);
+  }, [studentId, targetId]);
+
+  const clearStudentProgress = useCallback((sid: number, tid?: number | null) => {
+    if (typeof window === "undefined" || !sid) return;
+    const keysToRemove: string[] = [];
+    Object.keys(localStorage).forEach((key) => {
+      if (!key) return;
+      
+      const parts = key.split("_");
+      
+      // 1. foundation_quiz_done_${studentId}_${targetId}
+      if (key.startsWith("foundation_quiz_done_")) {
+        const keySid = Number(parts[3]);
+        const keyTid = Number(parts[4]);
+        if (keySid === sid && (!tid || keyTid === tid)) keysToRemove.push(key);
+      }
+      // 2. concept_read_${studentId}_${targetId}_${topicId}_${i}
+      else if (key.startsWith("concept_read_")) {
+        const keySid = Number(parts[2]);
+        const keyTid = Number(parts[3]);
+        if (keySid === sid && (!tid || keyTid === tid)) keysToRemove.push(key);
+      }
+      // 3. Topic progress and task metrics
+      else if (
+        key.startsWith("topic_progress_") ||
+        key.startsWith("coding_pct_") ||
+        key.startsWith("coding_passed_") ||
+        key.startsWith("coding_total_") ||
+        key.startsWith("quiz_done_") ||
+        key.startsWith("quiz_score_") ||
+        key.startsWith("coding_code_")
+      ) {
+        const keySid = Number(parts[2]);
+        const keyTid = Number(parts[3]);
+        if (keySid === sid && (!tid || keyTid === tid)) keysToRemove.push(key);
+      }
+      // 4. stage_progress_${studentId}_${stageId}
+      else if (key.startsWith("stage_progress_")) {
+        const keySid = Number(parts[2]);
+        if (keySid === sid) keysToRemove.push(key);
+      }
+    });
+    
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+    setProgressVersion(v => v + 1);
+  }, []);
+
+
+  const getTopicLiveProgress = useCallback((topicId: string) => {
+    if (!studentId || !targetId || !topicId) return { pct: 0, status: "queued" as const };
+    
+    // Check if topic is completed explicitly or by progress
+    const isTopicCompletedKey = `topic_progress_${studentId}_${targetId}_${topicId}`;
+    const topicStatusRaw = localStorage.getItem(isTopicCompletedKey);
+    
+    // STRICT QUEUED FALLBACK: If never explicitly started or completed, it remains queued with 0% progress!
+    if (!topicStatusRaw) {
+      return { pct: 0, status: "queued" as const };
+    }
+    
+    // 1. Concepts done (3 concepts: indices 0, 1, 2)
+    let conceptsReadCount = 0;
+    for (let i = 0; i < 3; i++) {
+      if (localStorage.getItem(`concept_read_${studentId}_${targetId}_${topicId}_${i}`) === "true") {
+        conceptsReadCount++;
+      }
+    }
+    
+    // 2. Coding Sandbox Done (%)
+    const codingPctRaw = localStorage.getItem(`coding_pct_${studentId}_${targetId}_${topicId}`);
+    const codingPct = codingPctRaw ? parseInt(codingPctRaw, 10) : 0;
+    
+    // 3. Quiz Done (boolean)
+    const quizDone = localStorage.getItem(`quiz_done_${studentId}_${targetId}_${topicId}`) === "true";
+    
+    const conceptsContribution = conceptsReadCount * 20;
+    const codingContribution = Math.round(codingPct * 0.2);
+    const quizContribution = quizDone ? 20 : 0;
+    let computedPct = conceptsContribution + codingContribution + quizContribution;
+    computedPct = Math.min(100, Math.max(0, computedPct));
+    
+    // Determine status
+    let status: "queued" | "in-progress" | "completed" = "queued";
+    if (topicStatusRaw === "completed" || computedPct === 100) {
+      status = "completed";
+      computedPct = 100;
+    } else if (topicStatusRaw === "started" || topicStatusRaw === "in-progress") {
+      status = "in-progress";
+    }
+    
+    return { pct: computedPct, status };
+  }, [studentId, targetId, progressVersion]);
+
+  const getTopicProgress = useCallback((topicId: string): "not_started" | "started" | "completed" => {
+    const live = getTopicLiveProgress(topicId);
+    if (live.status === "completed") return "completed";
+    if (live.status === "in-progress") return "started";
+    return "not_started";
+  }, [getTopicLiveProgress]);
+
+  // Gather all unique topic IDs
+  const getAllStudyPlanTopics = useCallback((): string[] => {
+    const list: string[] = [];
+    if (dynamicPlan?.plan_json?.curriculum) {
+      dynamicPlan.plan_json.curriculum.forEach((cat: any) => {
+        (cat.topics || []).forEach((t: any) => {
+          const id = (t.id ?? "").toLowerCase();
+          const title = (t.title ?? "").toLowerCase();
+          if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return;
+          if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return;
+          if (!list.includes(t.id)) {
+            list.push(t.id);
+          }
+        });
+      });
+    }
+    
+    // Add default foundation topic IDs if they aren't in the list
+    defaultFoundationTopics.forEach(t => {
+      if (!list.includes(t.id)) list.push(t.id);
+    });
+    
+    // Add default behavioral topic IDs if they aren't in the list
+    defaultBehavioralTopics.forEach(t => {
+      if (!list.includes(t.id)) list.push(t.id);
+    });
+    
+    return list;
+  }, [dynamicPlan]);
+
   // -- Load session --
   useEffect(() => {
     const sid = sessionStorage.getItem("student_id");
@@ -2675,8 +3236,10 @@ export default function StudyPlanPage() {
     const iDate = sessionStorage.getItem("interview_date");
 
     if (!sid) { router.replace("/login"); return; }
-    setStudentId(Number(sid));
-    if (tid) setTargetId(Number(tid));
+    const sidNum = Number(sid);
+    const tidNum = tid ? Number(tid) : null;
+    setStudentId(sidNum);
+    if (tidNum) setTargetId(tidNum);
     if (co) setCompany(co);
     if (ro) setRole(ro);
 
@@ -2684,7 +3247,40 @@ export default function StudyPlanPage() {
       const diff = Math.ceil((new Date(iDate).getTime() - Date.now()) / 86400000);
       setDaysLeft(Math.max(0, diff));
     }
-  }, [router]);
+
+    if (sessionStorage.getItem("target_activated") === "true") {
+      clearStudentProgress(sidNum, tidNum);
+      sessionStorage.removeItem("target_activated");
+    }
+  }, [router, clearStudentProgress]);
+
+  // -- Detect active target company switch --
+  useEffect(() => {
+    if (!studentId || !targetId) return;
+    const key = `last_target_id_${studentId}`;
+    const lastTargetId = localStorage.getItem(key);
+    const currentTargetId = String(targetId);
+    
+    if (lastTargetId !== currentTargetId) {
+      // The student switched target companies or loaded a new one!
+      // We don't wipe progress here because target-scoped keys isolate them perfectly!
+      localStorage.setItem(key, currentTargetId);
+    }
+  }, [studentId, targetId]);
+
+  const loadPlanAndCheckStale = useCallback((plan: PlanDetailResponse) => {
+    setDynamicPlan(plan);
+    setPlanStatus("ready");
+    if (!studentId || !targetId) return;
+    const planKey = `last_plan_id_${studentId}_${targetId}`;
+    const lastPlanId = localStorage.getItem(planKey);
+    const currentPlanId = String(plan.plan_id);
+    if (lastPlanId !== currentPlanId) {
+      // New plan for this target — reset this target's progress
+      clearStudentProgress(studentId, targetId);
+      localStorage.setItem(planKey, currentPlanId);
+    }
+  }, [studentId, targetId, clearStudentProgress]);
 
   // -- Load plan &mdash; auto-generate if idle --
   useEffect(() => {
@@ -2694,25 +3290,14 @@ export default function StudyPlanPage() {
         const status = await getPrepStatus(studentId, targetId);
         if (status.status === "ready") {
           const plan = await getLatestPrep(studentId, targetId);
-          setDynamicPlan(plan);
-          setPlanStatus("ready");
-          // Clear stale progress keys when a new plan loads
-          // This ensures gaps/foundation don't show "completed" from old sessions
-          const sid = String(studentId);
-          const planKey = `last_plan_id_${sid}`;
-          const lastPlanId = localStorage.getItem(planKey);
-          const currentPlanId = String(plan.plan_id);
-          if (lastPlanId !== currentPlanId) {
-            // New plan — reset all progress
-            localStorage.removeItem(`foundation_quiz_done_${sid}`);
-            localStorage.setItem(planKey, currentPlanId);
-          }
+          loadPlanAndCheckStale(plan);
         } else if (status.status === "generating") {
           setPlanStatus("generating");
           startPolling(studentId, targetId);
         } else {
           // Auto-generate instead of showing a button
           setPlanStatus("generating");
+          clearStudentProgress(studentId, targetId);
           try { await generatePrep(studentId); } catch { /* silent */ }
           startPolling(studentId, targetId);
         }
@@ -2721,7 +3306,20 @@ export default function StudyPlanPage() {
       }
     })();
     return () => stopPolling();
-  }, [studentId, targetId]);
+  }, [studentId, targetId, loadPlanAndCheckStale, clearStudentProgress]);
+
+
+  // -- Cycle loading steps during plan generation --
+  useEffect(() => {
+    if (planStatus !== "generating") {
+      setLoadingStepIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLoadingStepIndex((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [planStatus]);
 
   const startPolling = useCallback((sid: number, tid: number) => {
     stopPolling();
@@ -2731,8 +3329,7 @@ export default function StudyPlanPage() {
         if (status.status === "ready") {
           stopPolling();
           const plan = await getLatestPrep(sid, tid);
-          setDynamicPlan(plan);
-          setPlanStatus("ready");
+          loadPlanAndCheckStale(plan);
         } else if (status.status === "failed") {
           stopPolling();
           setPlanStatus("failed");
@@ -2742,17 +3339,18 @@ export default function StudyPlanPage() {
         // keep polling
       }
     }, 3000);
-  }, []);
+  }, [loadPlanAndCheckStale]);
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   };
 
   const handleGenerate = async () => {
-    if (!studentId) return;
+    if (!studentId || !targetId) return;
     setPlanStatus("generating");
     setPlanError(null);
     try {
+      clearStudentProgress(studentId, targetId);
       await generatePrep(studentId);
       if (targetId) startPolling(studentId, targetId);
     } catch (e: unknown) {
@@ -2765,6 +3363,7 @@ export default function StudyPlanPage() {
     if (!studentId || !targetId) return;
     try {
       await resetPrepPlan(studentId, targetId);
+      clearStudentProgress(studentId, targetId);
       setDynamicPlan(null);
       setPlanStatus("idle");
     } catch {
@@ -2774,12 +3373,23 @@ export default function StudyPlanPage() {
 
   // -- Navigation helper --
   const navigate = (screen: string, extra?: Record<string, unknown>) => {
-    setNav({ screen: screen as Screen, ...extra } as NavState);
+    setProgressVersion(v => v + 1);
+    setNav({ screen: screen as Screen, extra });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // -- Readiness score (from AI plan or default) --
-  const readinessPct = (dynamicPlan?.plan_json?.target_readiness_score) ?? (dynamicPlan ? 72 : 0);
+  const readinessPct = (() => {
+    if (!dynamicPlan) return 0;
+    const allTopicIds = getAllStudyPlanTopics();
+    if (allTopicIds.length === 0) return 0;
+    
+    let totalPct = 0;
+    allTopicIds.forEach(id => {
+      totalPct += getTopicLiveProgress(id).pct;
+    });
+    return Math.round(totalPct / allTopicIds.length);
+  })();
 
   // -- Render --
   const renderScreen = () => {
@@ -2795,7 +3405,10 @@ export default function StudyPlanPage() {
             onNavigate={navigate}
             generating={planStatus === "generating"}
             studentId={studentId}
+            targetId={targetId}
             getTopicProgress={getTopicProgress}
+            getTopicLiveProgress={getTopicLiveProgress}
+            markTopicStarted={markTopicStarted}
           />
         );
       case "foundation":
@@ -2805,7 +3418,9 @@ export default function StudyPlanPage() {
             role={role}
             dynamicPlan={dynamicPlan}
             studentId={studentId}
+            targetId={targetId}
             getTopicProgress={getTopicProgress}
+            getTopicLiveProgress={getTopicLiveProgress}
             markTopicStarted={markTopicStarted}
             onNavigate={(s, extra) => {
               // If navigating to quiz from foundation, pass completion callback
@@ -2813,8 +3428,8 @@ export default function StudyPlanPage() {
                 navigate(s, {
                   ...extra,
                   onQuizComplete: () => {
-                    if (typeof window !== "undefined" && studentId) {
-                      localStorage.setItem(`foundation_quiz_done_${studentId}`, "true");
+                    if (typeof window !== "undefined" && studentId && targetId) {
+                      localStorage.setItem(`foundation_quiz_done_${studentId}_${targetId}`, "true");
                     }
                   },
                 });
@@ -2825,30 +3440,47 @@ export default function StudyPlanPage() {
           />
         );
       case "curriculum":
-        return <Screen2Curriculum onNavigate={navigate} />;
+        return (
+          <Screen2Curriculum
+            dynamicPlan={dynamicPlan}
+            getTopicProgress={getTopicProgress}
+            getTopicLiveProgress={getTopicLiveProgress}
+            studentId={studentId}
+            onNavigate={navigate}
+            markTopicStarted={markTopicStarted}
+          />
+        );
       case "topic":
         return (
           <Screen3TopicDetail
-            topicTitle={nav.topicTitle || "Advanced Concurrency"}
-            topicId={nav.topicId}
-            topicTasks={nav.topicTasks || []}
-            quizQuestions={nav.quizQuestions}
+            topicTitle={nav.extra?.topicTitle as string}
+            topicId={nav.extra?.topicId as string}
+            topicTasks={nav.extra?.topicTasks as LearningTask[] ?? []}
+            quizQuestions={nav.extra?.quizQuestions as any}
             onNavigate={navigate}
             markTopicStarted={markTopicStarted}
             markTopicCompleted={markTopicCompleted}
             getTopicProgress={getTopicProgress}
+            getTopicLiveProgress={getTopicLiveProgress}
+            studentId={studentId}
+            targetId={targetId}
           />
         );
       case "concept":
         return (
           <Screen4ConceptDetail
-            conceptTitle={nav.conceptTitle || "Core Concept"}
-            parentTopic={nav.parentTopic || "Core Prep"}
-            conceptTask={nav.conceptTask}
-            topicContent={nav.topicContent}
-            subTopicId={nav.subTopicId}
-            quizQuestions={nav.quizQuestions}
+            conceptTitle={nav.extra?.conceptTitle as string}
+            parentTopic={nav.extra?.parentTopic as string}
+            conceptTask={nav.extra?.conceptTask as LearningTask}
+            topicContent={nav.extra?.topicContent as TopicContent}
+            subTopicId={nav.extra?.subTopicId as string}
+            quizQuestions={nav.extra?.quizQuestions as any}
             onNavigate={navigate}
+            topicId={nav.extra?.topicId as string}
+            conceptIndex={nav.extra?.conceptIndex as number}
+            studentId={studentId}
+            targetId={targetId}
+            onConceptRead={() => setProgressVersion(v => v + 1)}
           />
         );
       case "simulation":
@@ -2860,6 +3492,8 @@ export default function StudyPlanPage() {
             role={role}
             dynamicPlan={dynamicPlan}
             onNavigate={navigate}
+            getTopicLiveProgress={getTopicLiveProgress}
+            markTopicStarted={markTopicStarted}
           />
         );
       case "coding":
@@ -2870,6 +3504,7 @@ export default function StudyPlanPage() {
             quizTopic={nav.quizTopic || "Technical Quiz"}
             quizQuestions={nav.quizQuestions}
             onNavigate={navigate}
+            onQuizComplete={nav.onQuizComplete}
           />
         );
       default:
@@ -2887,30 +3522,204 @@ export default function StudyPlanPage() {
           color: C.text,
           fontFamily: "'Inter', 'DM Sans', sans-serif",
           padding: nav.screen === "coding" ? "24px 24px 0" : "32px 24px 48px",
+          position: "relative",
         }}
       >
+        {/* Main Content Container: blurred only when overlay is visible */}
+        <div
+          style={{
+            filter: (planStatus === "generating" && showGeneratingOverlay) ? "blur(6px)" : "none",
+            pointerEvents: (planStatus === "generating" && showGeneratingOverlay) ? "none" : "auto",
+            userSelect: (planStatus === "generating" && showGeneratingOverlay) ? "none" : "auto",
+            transition: "filter 0.4s ease",
+          }}
+        >
+          {/* -- Error banner -- */}
+          {planError && (
+            <div style={{ maxWidth: 900, margin: "0 auto 20px", background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, color: C.red }}>{planError}</span>
+              <button onClick={() => setPlanError(null)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer" }}>{Ico.x(14)}</button>
+            </div>
+          )}
 
+          {/* -- No plan state &mdash; auto-generate silently -- */}
+          {nav.screen === "plan" && planStatus === "idle" && !dynamicPlan && (
+            <div style={{ maxWidth: 900, margin: "0 auto 24px" }}>
+              <div style={{ background: C.purpleBg, border: `1px solid ${C.purpleDim}`, borderRadius: 14, padding: "16px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 16, height: 16, border: `2px solid ${C.purpleLight}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                <span style={{ fontSize: 13, color: C.purpleLight, fontWeight: 600 }}>Preparing your personalized study plan...</span>
+              </div>
+            </div>
+          )}
 
-        {/* -- Error banner -- */}
-        {planError && (
-          <div style={{ maxWidth: 900, margin: "0 auto 20px", background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, color: C.red }}>{planError}</span>
-            <button onClick={() => setPlanError(null)} style={{ background: "none", border: "none", color: C.red, cursor: "pointer" }}>{Ico.x(14)}</button>
-          </div>
-        )}
+          {/* -- Screen content -- */}
+          {renderScreen()}
+        </div>
 
-        {/* -- No plan state &mdash; auto-generate silently -- */}
-        {nav.screen === "plan" && planStatus === "idle" && !dynamicPlan && (
-          <div style={{ maxWidth: 900, margin: "0 auto 24px" }}>
-            <div style={{ background: C.purpleBg, border: `1px solid ${C.purpleDim}`, borderRadius: 14, padding: "16px 24px", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 16, height: 16, border: `2px solid ${C.purpleLight}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-              <span style={{ fontSize: 13, color: C.purpleLight, fontWeight: 600 }}>Preparing your personalized study plan...</span>
+        {/* -- Blur Overlay for Generation -- */}
+        {planStatus === "generating" && showGeneratingOverlay && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(243, 243, 243, 0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: "40px 24px",
+            }}
+          >
+            <div
+              className="sp-fade-up"
+              style={{
+                background: C.white,
+                border: `1.5px solid ${C.border}`,
+                borderRadius: 20,
+                padding: "40px 32px",
+                maxWidth: 480,
+                width: "100%",
+                boxShadow: "0 24px 48px rgba(0, 0, 0, 0.08)",
+                textAlign: "center" as const,
+                backdropFilter: "blur(20px)",
+                animation: "fadeInUp 0.4s ease both",
+              }}
+            >
+              {/* Spinner & Logo Area */}
+              <div style={{ position: "relative" as const, width: 80, height: 80, margin: "0 auto 24px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {/* Large outer pulsing circle */}
+                <div style={{
+                  position: "absolute",
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: "50%",
+                  background: C.greenBg,
+                  border: `2px solid ${C.greenLight}`,
+                  animation: "pulse 2s infinite ease-in-out",
+                }} />
+                {/* Mid spinning gradient/dashed ring */}
+                <div style={{
+                  position: "absolute",
+                  width: 60,
+                  height: 60,
+                  borderRadius: "50%",
+                  border: `3px dashed ${C.purple}`,
+                  borderTopColor: "transparent",
+                  animation: "spin 1.2s linear infinite",
+                }} />
+                {/* Center visual icon */}
+                <div style={{ fontSize: 24, zIndex: 2 }}>⚡</div>
+              </div>
+
+              {/* Title */}
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 10px", letterSpacing: "-0.3px" }}>
+                Architecting Your Study Plan
+              </h2>
+              <p style={{ fontSize: 13, color: C.textMuted, margin: "0 0 28px", lineHeight: 1.5 }}>
+                Our AI is matching your resume highlights and skills against the target JD requirements at <strong>{company}</strong> for the <strong>{role}</strong> position.
+              </p>
+
+              {/* Loading Steps */}
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 14, textAlign: "left" as const, padding: "0 8px" }}>
+                {[
+                  `Analyzing target profile at ${company}...`,
+                  "Evaluating resume & baseline DSA skills...",
+                  "Customizing high-ROI technical topics...",
+                  "Assembling system design simulations...",
+                  "Generating final study plan structure..."
+                ].map((stepText, idx) => {
+                  const isDone = idx < loadingStepIndex;
+                  const isActive = idx === loadingStepIndex;
+                  const isPending = idx > loadingStepIndex;
+
+                  let indicatorBg = C.border;
+                  let indicatorContent = null;
+                  let opacity = 0.5;
+                  let fontWeight = 400;
+
+                  if (isDone) {
+                    indicatorBg = C.greenLight;
+                    indicatorContent = Ico.check(10, C.purple);
+                    opacity = 1;
+                  } else if (isActive) {
+                    indicatorBg = C.purple;
+                    indicatorContent = (
+                      <div style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: C.greenLight,
+                        animation: "pulse 1s infinite",
+                      }} />
+                    );
+                    opacity = 1;
+                    fontWeight = 600;
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        opacity,
+                        transition: "all 0.3s ease",
+                      }}
+                    >
+                      <div style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: "50%",
+                        background: indicatorBg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        transition: "background 0.3s",
+                      }}>
+                        {indicatorContent}
+                      </div>
+                      <span style={{ fontSize: 13, color: C.text, fontWeight }}>
+                        {stepText}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Back button — generation continues in background */}
+              <button
+                onClick={() => router.back()}
+                style={{
+                  marginTop: 28,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "10px 22px",
+                  borderRadius: 10,
+                  background: "none",
+                  border: `1.5px solid ${C.border}`,
+                  color: C.textMuted,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.purple; (e.currentTarget as HTMLButtonElement).style.color = C.purple; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; (e.currentTarget as HTMLButtonElement).style.color = C.textMuted; }}
+              >
+                {Ico.arrowLeft(12)} Back
+              </button>
+              <p style={{ fontSize: 11, color: C.textDim, marginTop: 10, marginBottom: 0 }}>
+                Your study plan generates in the background
+              </p>
             </div>
           </div>
         )}
-
-        {/* -- Screen content -- */}
-        {renderScreen()}
 
         {/* -- Feedback Modal -- */}
         {showFeedback && studentId && (

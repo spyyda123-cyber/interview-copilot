@@ -37,10 +37,8 @@ export default function CompaniesPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-[#fdfdfd]">
-
-
-      <div className="flex-1 overflow-auto p-8">
+    <div>
+      <div className="p-8">
         <div className="mx-auto max-w-5xl space-y-8">
           <div className="flex items-center justify-between">
             <div>

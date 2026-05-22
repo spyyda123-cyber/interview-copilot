@@ -155,7 +155,7 @@ export default function InterviewsPage() {
       sessionStorage.setItem("primary_skill", primarySkill);
 
       closeModal();
-      
+      sessionStorage.setItem("target_activated", "true");
       // Navigate to the interactive study plan (Q&A, quiz, coding)
       router.push("/study-plan");
     } catch (err) {

@@ -45,6 +45,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import ActivationGuard from "./components/ActivationGuard";
+import ScrollToTop from "./components/ScrollToTop";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -85,7 +86,10 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${dmSans.variable} ${inter.variable} ${jetBrainsMono.variable} ${playfairDisplay.variable} antialiased`}
       >
-        <ActivationGuard>{children}</ActivationGuard>
+        <ActivationGuard>
+          <ScrollToTop />
+          {children}
+        </ActivationGuard>
       </body>
     </html>
   );

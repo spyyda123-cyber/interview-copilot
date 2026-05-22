@@ -67,7 +67,8 @@ Minimum 2 behavioral topics in the curriculum.
 ════════ TOPIC RULES ════════
 
 Each topic must:
-- Be directly traceable to the JD, round_structure, or gap_analysis
+- Be directly traceable to the JD, round_structure, or gap_analysis — except foundation topics,
+  which are derived from the role's core language and stack as defined in STAGE RULES.
 - Have a realistic mastery_time_minutes (30–120 mins per topic)
 - Have a 2-sentence description:
   Sentence 1 — what this topic covers specifically for this role.
@@ -116,6 +117,10 @@ The roadmap has 3 fixed stages plus 1 conditional stage:
 STAGE 1 — foundation
 Purpose: Simple refresher topics on the core language and stack required for the role.
 Generated for ALL students regardless of proficiency level.
+Topic source: Derive foundation topics from the primary language and tech stack implied by the
+JD and required_skills — not from the student profile. Generate exactly 2–4 foundational
+refresher topics that any candidate for this role must be comfortable with before entering
+deep prep. Do not leave this stage empty.
 Topic rules for this stage:
 - difficulty must be "easy" only
 - mastery_time_minutes must be ≤ 30

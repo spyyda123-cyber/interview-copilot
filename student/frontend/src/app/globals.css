@@ -65,6 +65,14 @@
 
 * { box-sizing: border-box; }
 
+html, body, #__next {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--bg-body);
   color: var(--text-primary);
@@ -73,7 +81,7 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  margin: 0;
+  overflow-y: auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -85,8 +93,8 @@ h1, h2, h3, h4, h5, h6 {
 /* ── Layout Shell ── */
 .app-shell {
   display: flex;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  width: 100%;
   background: #f3f3f3;
 }
 
@@ -103,6 +111,7 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 40;
   overflow-y: auto;
   border-right: 1px solid #ECECEC;
+  /* Sidebar keeps its own scroll for its nav items */
 }
 
 .sidebar-brand {
@@ -186,10 +195,9 @@ h1, h2, h3, h4, h5, h6 {
 .main-area {
   margin-left: 220px;
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
   background: #f3f3f3;
 }
 
@@ -214,12 +222,13 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
+  height: auto;
   position: relative;
 }
 
 .main-content.modal-scroll-lock {
+  /* Lock only when modal is open */
   overflow: hidden !important;
 }
 

@@ -112,14 +112,14 @@ export default function EditCompanyPage() {
 
   if (initialLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#fdfdfd]">
+      <div className="flex items-center justify-center p-16 bg-[#fdfdfd]">
         <p className="text-gray-500 font-medium">Loading company details...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex xl:h-screen flex-col bg-[#fdfdfd] overflow-y-auto">
+    <div className="bg-[#fdfdfd]">
       <div className="flex items-center justify-between border-b border-gray-100 px-8 py-5 flex-shrink-0">
         <h1 className="text-xl font-bold text-gray-900 tracking-tight">Companies / Edit</h1>
         <div className="flex items-center text-xs font-semibold uppercase tracking-wider text-gray-400">

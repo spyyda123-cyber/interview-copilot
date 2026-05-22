@@ -20,8 +20,8 @@ Every field must be fully populated to its maximum allowed length and depth.
 Never truncate content. Never summarize when detail is expected.
 A short or minimal response is a wrong response for this use case.
 The student is paying for depth — deliver it in every single field.
-If a content field allows 4–5 sentences, write 4–5 sentences.
-Never write 2 when 4 is allowed.
+If a content field allows 2–3 sentences, write 2–3 sentences.
+Never write 1 when 3 is allowed.
 
 ════════ INPUTS ════════
 
@@ -53,12 +53,12 @@ Each sub-topic must progress through:
 6. Communication tip — how to explain this clearly under interview pressure
 
 Content field depth requirements per field:
-- intuition: 4–5 sentences. Include an analogy and the engineering motivation.
-- core_mechanics: 4–5 sentences. Internal mechanism with enough depth to handle follow-up questions.
-- real_world_usage: 4–5 sentences. Name specific systems, frameworks, or production patterns used at scale.
-- tradeoffs: 4–5 sentences. Cover at least 2 distinct tradeoffs with their real-world consequences.
-- common_mistakes: 4–5 sentences. Name the specific mistake, explain why candidates make it, and describe how to avoid it.
-- communication_tip: 2–3 sentences. Concrete phrasing the student can use verbatim in an interview.
+- intuition: 2–3 sentences. Include a high-impact analogy and the engineering motivation.
+- core_mechanics: 2–3 sentences. Internal mechanism with enough depth to handle follow-up questions.
+- real_world_usage: 2–3 sentences. Name specific systems, frameworks, or production patterns used at scale.
+- tradeoffs: 2–3 sentences. Cover at least 2 distinct tradeoffs with their real-world consequences.
+- common_mistakes: 2–3 sentences. Name the specific mistake, explain why candidates make it, and describe how to avoid it.
+- communication_tip: 1–2 sentences. Concrete phrasing the student can use verbatim in an interview.
 
 Explanations must:
 - Include engineering reasoning (WHY, not just WHAT)
@@ -68,7 +68,7 @@ Explanations must:
 ════════ CONTENT RULES ════════
 
 strategic_insights:
-- Minimum 3 full sentences. Maximum 5 sentences.
+- Minimum 2 full sentences. Maximum 3 sentences.
 - Explain why THIS topic matters for THIS company and role.
 - Reference real company systems if company intelligence is available.
 - If company intelligence is not available, generalize by role type — do not state this in the JSON field, just write good generalized content.
@@ -80,13 +80,13 @@ frequency_label assignment rule:
 - "Low Frequency" → topic appears in <30% of interviews for this role type
 
 interview_traps:
-- Count by difficulty: easy → minimum 3, medium → minimum 4, hard → minimum 5. Maximum always 5.
-- Each trap must have a title and a description: 3–4 sentences explaining the misconception, why candidates fall for it, and what the correct thinking is.
+- Count by difficulty: easy → minimum 2, medium → minimum 3, hard → minimum 4. Maximum always 4.
+- Each trap must have a title and a description: 2–3 sentences explaining the misconception, why candidates fall for it, and what the correct thinking is.
 - Must be specific to this topic — no generic interview advice
 - If company intelligence is available, tailor at least 1 trap to a known interview pattern at that company
 
 practice_tasks:
-- Minimum 2, maximum 4 per topic
+- Minimum 2, maximum 3 per topic
 - Must include at least 1 task of type "code" if coding_required is true
 - Must include at least 1 task of type "qa" regardless of role
 - task_type must be one of: code | qa | mock
@@ -100,7 +100,7 @@ Duration guidelines by task_type:
 - mock → 15–20 minutes
 
 For task_type = "code":
-- problem_statement: 4–6 sentences. Cover the scenario, constraints context, and what the solution must achieve.
+- problem_statement: 2–3 sentences. Cover the scenario, constraints context, and what the solution must achieve.
 - method_signatures[]: include full method signatures in the target language
 - constraints[]: minimum 4 constraints — cover input size, edge cases, time/space requirements
 - hints[]: exactly 3 hints ordered from least to most revealing:
@@ -114,20 +114,20 @@ For task_type = "code":
 
 For task_type = "qa":
 - Include question and ideal_answer_points[]
-- ideal_answer_points[]: minimum 5 points. Each point must be a complete sentence explaining a concept, tradeoff, or specific technical detail — never a keyword or one-word label. Points must collectively form a complete, senior-level answer.
+- ideal_answer_points[]: minimum 3 points. Each point must be a complete sentence explaining a concept, tradeoff, or specific technical detail — never a keyword or one-word label. Points must collectively form a complete, senior-level answer.
 - Set problem_statement, method_signatures, constraints, hints, time_complexity_target,
   space_complexity_target, test_cases, scenario, evaluation_criteria to JSON null
 
 For task_type = "mock":
-- scenario: 3–4 sentences describing a realistic interview scenario with enough context to role-play.
-- evaluation_criteria[]: minimum 4 criteria. Each criterion is a complete sentence describing what a strong answer demonstrates — used by the student to self-assess.
+- scenario: 2–3 sentences describing a realistic interview scenario with enough context to role-play.
+- evaluation_criteria[]: minimum 3 criteria. Each criterion is a complete sentence describing what a strong answer demonstrates — used by the student to self-assess.
 - Set all code fields and qa fields to JSON null
 
 quiz:
-- Count by difficulty: easy → 3 questions, medium → 4 questions, hard → 5 questions.
+- Count by difficulty: easy → 2 questions, medium → 3 questions, hard → 4 questions.
 - Each question includes: question_text, options[] (exactly 4 options), correct_option_index (0-based), explanation, sub_topic_id
 - options[]: all 4 options must be plausible — no obviously wrong answers. A strong candidate should have to think.
-- explanation: 3–4 sentences. Explain why the correct answer is right AND why the most tempting wrong answer is wrong.
+- explanation: 2–3 sentences. Explain why the correct answer is right AND why the most tempting wrong answer is wrong.
 - sub_topic_id must exactly match one of the sub_topic ids received in inputs
   — This links each quiz question to its sub-topic for per-sub-topic quiz rendering in the UI
 - Questions must target interview-level understanding, not memorization
@@ -144,7 +144,7 @@ visual_explanation:
 - Each component must have: id, label, description (1 sentence), and position (e.g. "top-left", "center", "bottom-right")
 
 communication_tips[]:
-- 3–5 short tips for explaining this topic clearly in an interview
+- 2–3 short tips for explaining this topic clearly in an interview
 - Each tip is a single actionable sentence — do not write vague advice like "Be clear and concise."
   Give specific, usable guidance the student can apply immediately.
 - Tips are topic-level (not per sub-topic)

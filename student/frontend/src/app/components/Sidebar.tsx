@@ -35,10 +35,8 @@ const IconLogOut = () => (
 );
 
 const NAV = [
-  { label: "Dashboard",      href: "/dashboard",   Icon: IconDashboard },
-  { label: "Placements",     href: "/target",       Icon: IconBriefcase },
-  { label: "Interview List", href: "/interviews",   Icon: IconList },
-  { label: "Study Plan",     href: "/study-plan",   Icon: IconBook },
+  { label: "Dashboard",  href: "/dashboard", Icon: IconDashboard },
+  { label: "Placements", href: "/target",    Icon: IconBriefcase },
 ];
 export default function Sidebar() {
   const pathname = usePathname();

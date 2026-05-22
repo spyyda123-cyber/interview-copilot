@@ -18,6 +18,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 html,
 body {
   margin: 0;
@@ -26,4 +30,5 @@ body {
   background: var(--color-surface);
   color: var(--color-text-primary);
   font-family: "DM Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  overflow-y: auto;
 }

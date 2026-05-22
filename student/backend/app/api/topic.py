@@ -127,8 +127,9 @@ def _generate_topic_content(
     if not gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not set — add it to .env.prod")
 
-    primary_model = getattr(settings, "GEMINI_GENERATION_MODEL", "gemini-2.5-pro")
-    fallback_model = getattr(settings, "GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+    # Force gemini-2.5-flash for topic generation to ensure lightning-fast real-time load times (3-8 seconds vs 40+ seconds)
+    primary_model = "gemini-2.5-flash"
+    fallback_model = "gemini-1.5-flash"
 
     # Normalise model names: strip "models/" prefix for new SDK (it uses bare names)
     def _normalise_for_new_sdk(name: str) -> str:
