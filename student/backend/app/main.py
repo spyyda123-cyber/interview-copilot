@@ -99,6 +99,7 @@ app.include_router(topic.router)
 
 
 @app.get("/health")
+@app.head("/health")
 def health_check() -> dict:
     return {"status": "ok"}
 

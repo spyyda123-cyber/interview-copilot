@@ -72,5 +72,6 @@ app.include_router(applications.router)
 
 
 @app.get("/health")
+@app.head("/health")
 def health_check() -> dict:
     return {"status": "ok"}
