@@ -23,6 +23,7 @@ from app.api import (
     feedback,
     placement,
     topic,
+    progress,
 )
 from app.core.config import masked_gemini_key, settings
 from app.db.base import Base
@@ -96,6 +97,7 @@ app.include_router(scorm.router)
 app.include_router(feedback.router)
 app.include_router(placement.router)
 app.include_router(topic.router)
+app.include_router(progress.router, prefix="/progress", tags=["Progress"])
 
 
 @app.get("/health")

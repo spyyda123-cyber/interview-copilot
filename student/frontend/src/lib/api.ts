@@ -237,6 +237,26 @@ export type HealthResponse = {
   status: string;
 };
 
+// ── Progress Sync Types ──────────────────────────────────────────
+
+export type TopicProgressUpdate = {
+  topic_id: string;
+  status: string;
+  coding_pct?: number;
+  quiz_done?: boolean;
+  concepts_read_count?: number;
+};
+
+export type TopicProgressResponse = TopicProgressUpdate & {
+  target_id: number;
+  student_id: number;
+};
+
+export type SyncProgressPayload = {
+  updates: TopicProgressUpdate[];
+};
+
+
 export type AuthResponse = {
   student_id: number;
   student_name?: string | null;
@@ -602,6 +622,29 @@ export const getPrepStatus = async (
   return apiFetch<PrepGenerateResponse>(
     `/prep/status/${studentId}?target_id=${targetId}`
   );
+};
+
+// ── Progress API Functions ───────────────────────────────────────────────
+
+export const getStudyProgress = async (
+  studentId: number,
+  targetId: number
+) => {
+  return apiFetch<TopicProgressResponse[]>(`/progress/${studentId}/${targetId}`);
+};
+
+export const syncTopicProgress = async (
+  studentId: number,
+  targetId: number,
+  payload: SyncProgressPayload
+) => {
+  return apiFetch<{ status: string; updated_count: number }>(`/progress/${studentId}/${targetId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 };
 
 // ── Prompt 2 — Topic Learning Engine ─────────────────────────────────────────

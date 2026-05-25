@@ -22,6 +22,8 @@ import {
   getPrepStatus,
   resetPrepPlan,
   getTopicContent,
+  getStudyProgress,
+  syncTopicProgress,
   type TopicContent,
   type PlanDetailResponse,
   type DailyPlanItem,
@@ -3258,6 +3260,74 @@ export default function StudyPlanPage() {
       sessionStorage.removeItem("target_activated");
     }
   }, [router, clearStudentProgress]);
+
+  // -- Hydrate Progress from DB --
+  useEffect(() => {
+    if (!studentId || !targetId) return;
+    (async () => {
+      try {
+        const progressList = await getStudyProgress(studentId, targetId);
+        let changed = false;
+        progressList.forEach((p) => {
+          localStorage.setItem(`topic_progress_${studentId}_${targetId}_${p.topic_id}`, p.status);
+          localStorage.setItem(`coding_pct_${studentId}_${targetId}_${p.topic_id}`, String(p.coding_pct || 0));
+          if (p.quiz_done) {
+            localStorage.setItem(`quiz_done_${studentId}_${targetId}_${p.topic_id}`, "true");
+          }
+          if (p.concepts_read_count) {
+            for (let i = 0; i < p.concepts_read_count; i++) {
+              localStorage.setItem(`concept_read_${studentId}_${targetId}_${p.topic_id}_${i}`, "true");
+            }
+          }
+          changed = true;
+        });
+        if (changed) setProgressVersion(v => v + 1);
+      } catch (e) {
+        console.error("Failed to hydrate progress", e);
+      }
+    })();
+  }, [studentId, targetId]);
+
+  // -- Sync Progress to DB --
+  useEffect(() => {
+    if (!studentId || !targetId || progressVersion === 0) return;
+    
+    const timeout = setTimeout(async () => {
+      const allTopicIds = getAllStudyPlanTopics();
+      const updates = allTopicIds.map(topicId => {
+        const live = getTopicLiveProgress(topicId);
+        const codingPctRaw = localStorage.getItem(`coding_pct_${studentId}_${targetId}_${topicId}`);
+        const codingPct = codingPctRaw ? parseInt(codingPctRaw, 10) : 0;
+        const quizDone = localStorage.getItem(`quiz_done_${studentId}_${targetId}_${topicId}`) === "true";
+        
+        let conceptsReadCount = 0;
+        for (let i = 0; i < 3; i++) {
+          if (localStorage.getItem(`concept_read_${studentId}_${targetId}_${topicId}_${i}`) === "true") {
+            conceptsReadCount++;
+          }
+        }
+        
+        return {
+          topic_id: topicId,
+          status: live.status === "in-progress" ? "started" : live.status,
+          coding_pct: codingPct,
+          quiz_done: quizDone,
+          concepts_read_count: conceptsReadCount
+        };
+      }).filter(u => u.status === "started" || u.status === "completed");
+      
+      if (updates.length === 0) return;
+      
+      try {
+        await syncTopicProgress(studentId, targetId, { updates });
+      } catch (e) {
+        console.error("Failed to sync progress", e);
+      }
+    }, 2000);
+    
+    return () => clearTimeout(timeout);
+  }, [progressVersion, studentId, targetId, getAllStudyPlanTopics, getTopicLiveProgress]);
+
 
   // -- Detect active target company switch --
   useEffect(() => {

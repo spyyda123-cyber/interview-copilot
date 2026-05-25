@@ -112,3 +112,20 @@ class ScormPlanCompletion(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     plan: Mapped["LearningPlan"] = relationship(back_populates="scorm_completion")
+
+
+class TopicProgress(Base):
+    """
+    Tracks a student's progress on individual topics within a specific placement target.
+    """
+    __tablename__ = "topic_progress"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("target_interviews.id"), index=True)
+    topic_id: Mapped[str] = mapped_column(String(255), index=True)
+    status: Mapped[str] = mapped_column(String(50), default="started") # "started", "completed"
+    coding_pct: Mapped[int] = mapped_column(Integer, default=0)
+    quiz_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    concepts_read_count: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
