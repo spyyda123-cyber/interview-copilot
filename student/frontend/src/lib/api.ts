@@ -32,11 +32,6 @@ const getApiBaseUrl = () => {
   if (!url) {
     throw new Error("NEXT_PUBLIC_API_URL is not configured.");
   }
-  if (url.includes(":8000")) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL points to deprecated port 8000. Use backend port 8010."
-    );
-  }
   return url;
 };
 
@@ -871,9 +866,178 @@ export type ExecuteResponse = {
 };
 
 export const executeCode = async (payload: ExecuteRequest): Promise<ExecuteResponse> => {
-  return apiFetch<ExecuteResponse>("/execute/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const LANG_IDS: Record<string, number> = {
+    python: 71,
+    javascript: 63,
+    java: 62,
+    cpp: 54,
+  };
+
+  const JUDGE0_BASE = "https://ce.judge0.com";
+  const langId = LANG_IDS[payload.language] ?? 71;
+
+  const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
+  const decodeB64 = (s: string | null | undefined): string => {
+    if (!s) return "";
+    try { return decodeURIComponent(escape(atob(s))).trim(); } catch { return s.trim(); }
+  };
+
+  // ── Build a self-contained runnable source that:
+  //    1. Contains the student's code
+  //    2. Reads the test input from stdin
+  //    3. Calls the detected function with that input
+  //    4. Prints the result so Judge0 can compare stdout vs expected_output
+  const buildRunnable = (language: string, source: string, input: string): { source: string; stdin: string } => {
+    if (language === "python") {
+      // Detect the first top-level function name (def <name>)
+      const fnMatch = source.match(/^def\s+(\w+)\s*\(/m);
+      const fnName = fnMatch?.[1] ?? null;
+
+      if (fnName) {
+        // Build a harness that reads stdin, parses it, calls the function, prints result
+        const harness = `
+import sys as _sys
+import ast as _ast
+
+_raw = _sys.stdin.read().strip()
+
+# Try to parse the input as a Python literal (handles strings, lists, ints, tuples)
+try:
+    _arg = _ast.literal_eval(_raw)
+except Exception:
+    _arg = _raw  # fallback: pass as plain string
+
+# Call the detected function and print the result
+_result = ${fnName}(_arg)
+print(_result)
+`;
+        return { source: source + "\n" + harness, stdin: input };
+      }
+      // No function detected — just pass stdin through (script-style code)
+      return { source, stdin: input };
+    }
+
+    if (language === "javascript") {
+      const fnMatch = source.match(/function\s+(\w+)\s*\(/) ?? source.match(/const\s+(\w+)\s*=\s*(?:async\s*)?\(/);
+      const fnName = fnMatch?.[1] ?? null;
+      if (fnName) {
+        const harness = `
+const _lines = require('fs').readFileSync('/dev/stdin','utf8').trim();
+let _arg;
+try { _arg = JSON.parse(_lines); } catch(e) { _arg = _lines; }
+const _result = ${fnName}(_arg);
+console.log(JSON.stringify(_result) !== undefined ? JSON.stringify(_result) : String(_result));
+`;
+        return { source: source + "\n" + harness, stdin: input };
+      }
+      return { source, stdin: input };
+    }
+
+    // Java / C++ — pass stdin as-is, student code must handle it
+    return { source, stdin: input };
+  };
+
+  const submitOne = async (tc: ExecuteTestCase): Promise<ExecuteTestResult> => {
+    const { source: runnableSource, stdin } = buildRunnable(payload.language, payload.source_code, tc.input);
+
+    const submitRes = await fetch(
+      `${JUDGE0_BASE}/submissions?base64_encoded=true&wait=false`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          language_id: langId,
+          source_code: b64(runnableSource),
+          stdin: b64(stdin),
+          base64_encoded: true,
+          wait: false,
+        }),
+      }
+    );
+    if (!submitRes.ok) throw new Error(`Judge0 submit failed: ${submitRes.status}`);
+    const { token } = await submitRes.json();
+    if (!token) throw new Error("No token from Judge0");
+
+    // Poll until done (max 20s)
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const pollRes = await fetch(
+        `${JUDGE0_BASE}/submissions/${token}?base64_encoded=true`,
+        { headers: { "Content-Type": "application/json" } }
+      );
+      const result = await pollRes.json();
+      const statusId: number = result?.status?.id ?? 0;
+      if (statusId === 1 || statusId === 2) continue;
+
+      const stdout = decodeB64(result.stdout);
+      const stderr = decodeB64(result.stderr);
+      const compileOut = decodeB64(result.compile_output);
+      const execTime: string | null = result.time ?? null;
+
+      const expected = tc.expected_output.trim();
+      const actual = stdout.trim();
+
+      let got: string;
+      let passed: boolean;
+      let compileError: string | null = null;
+
+      if (statusId === 6) {
+        got = `Compile Error: ${compileOut || stderr}`;
+        passed = false;
+        compileError = compileOut || stderr;
+      } else if (statusId === 5) {
+        got = "Time Limit Exceeded";
+        passed = false;
+      } else if (statusId >= 7 && statusId <= 12) {
+        got = `Runtime Error: ${stderr || "Unknown"}`;
+        passed = false;
+      } else {
+        // Normalise: strip quotes if AI expected_output is a quoted string like "3"
+        const normaliseVal = (v: string) => {
+          const stripped = v.replace(/^["']|["']$/g, "");
+          return stripped;
+        };
+        passed = actual === expected || normaliseVal(actual) === normaliseVal(expected);
+        got = actual || (stderr ? `Error: ${stderr}` : "(no output)");
+      }
+
+      return {
+        label: tc.label || "Test",
+        passed,
+        input: tc.input,
+        expected,
+        got,
+        stderr: stderr || null,
+        compile_error: compileError,
+        execution_time: execTime,
+      };
+    }
+
+    return {
+      label: tc.label || "Test",
+      passed: false,
+      input: tc.input,
+      expected: tc.expected_output,
+      got: "Execution timed out",
+      stderr: null,
+      compile_error: null,
+      execution_time: null,
+    };
+  };
+
+  // Run test cases sequentially (Judge0 free tier rate-limited)
+  const results: ExecuteTestResult[] = [];
+  for (const tc of payload.test_cases) {
+    results.push(await submitOne(tc));
+  }
+
+  const passed_count = results.filter(r => r.passed).length;
+  const total_count = results.length;
+  return {
+    results,
+    passed_count,
+    total_count,
+    success_rate: total_count > 0 ? Math.round((passed_count / total_count) * 100) : 0,
+  };
 };
+
