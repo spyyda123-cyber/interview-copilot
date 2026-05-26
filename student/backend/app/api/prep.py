@@ -341,7 +341,7 @@ def get_prep_status(
         return PrepGenerateResponse(task_id="", status="missing")
 
     if not plan:
-        return PrepGenerateResponse(task_id="", status="generating")
+        return PrepGenerateResponse(task_id="", status="missing")
 
     plan = _mark_stale_generating_as_failed(db, plan)
 

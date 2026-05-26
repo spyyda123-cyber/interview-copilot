@@ -1,4 +1,5 @@
 import logging
+# Trigger uvicorn reload to fetch updated environment variables from .env
 import os
 import sys
 
@@ -24,6 +25,7 @@ from app.api import (
     placement,
     topic,
     progress,
+    execute,
 )
 from app.core.config import masked_gemini_key, settings
 from app.db.base import Base
@@ -98,6 +100,7 @@ app.include_router(feedback.router)
 app.include_router(placement.router)
 app.include_router(topic.router)
 app.include_router(progress.router, prefix="/progress", tags=["Progress"])
+app.include_router(execute.router)
 
 
 @app.get("/health")

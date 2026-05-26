@@ -455,7 +455,13 @@ function ModuleContent() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 relative">
+        <div className="absolute top-4 left-4">
+          <button onClick={() => router.push("/study-plan")} className="flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-bold text-slate-700 transition gap-2 shadow-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back to Study Plan
+          </button>
+        </div>
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         <p className="text-slate-500 font-medium animate-pulse">Loading module content...</p>
       </div>

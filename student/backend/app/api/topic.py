@@ -129,7 +129,7 @@ def _generate_topic_content(
 
     # Force gemini-2.5-flash for topic generation to ensure lightning-fast real-time load times (3-8 seconds vs 40+ seconds)
     primary_model = "gemini-2.5-flash"
-    fallback_model = "gemini-1.5-flash"
+    fallback_model = "gemini-2.0-flash"  # gemini-1.5-flash deprecated on v1beta
 
     # Normalise model names: strip "models/" prefix for new SDK (it uses bare names)
     def _normalise_for_new_sdk(name: str) -> str:
@@ -166,11 +166,11 @@ def _generate_topic_content(
         logger.info("[TOPIC] Parsed keys=%s", list(parsed.keys())[:10])
         return parsed
 
-    # ── Old SDK (google-generativeai, v1beta) — safety net for gemini-1.5-flash ──
+    # ── Old SDK (google-generativeai, v1beta) — safety net for gemini-2.0-flash ──
     def _call_old_sdk_flash() -> dict:
         import google.generativeai as genai_old
 
-        model_name = "gemini-1.5-flash"
+        model_name = "gemini-2.0-flash"  # gemini-1.5-flash deprecated on v1beta
         genai_old.configure(api_key=gemini_api_key)
         logger.info("[TOPIC] Calling Gemini safety-net (old SDK) model=%s topic=%s", model_name, topic_id)
         model = genai_old.GenerativeModel(
@@ -284,7 +284,9 @@ def get_topic_content(
             for day in plan.plan_json["daily_plan"]:
                 focus = day.get("focus", "")
                 legacy_id = focus.lower().replace(" ", "-")
-                if legacy_id == topic_id or focus == topic_id:
+                # Also try to match by replacing slashes and special chars
+                legacy_id_clean = focus.lower().replace(" ", "-").replace("/", "-").replace("&", "and")
+                if legacy_id == topic_id or focus == topic_id or legacy_id_clean == topic_id:
                     topic_data = {"title": focus, "mastery_time_minutes": 60}
                     sub_topics = [
                         {"id": f"{legacy_id}-concept-1", "title": f"Core {focus} Concepts"},
@@ -294,10 +296,56 @@ def get_topic_content(
                     difficulty = "medium"
                     break
 
+    # ── Graceful fallback: topic_id is a default behavioral/foundation/leadership topic ──
+    # Instead of 404, generate content from the topic slug (handles defaultBehavioralTopics,
+    # defaultFoundationTopics etc. that may not exist in legacy daily_plan format)
     if not topic_data:
-        logger.error("Topic '%s' NOT FOUND in curriculum! Available topics: %s", topic_id, 
-                     [t.get('id') for c in plan.plan_json.get("curriculum", []) for t in c.get("topics", [])] if plan and plan.plan_json else "None/No Plan")
-        raise HTTPException(status_code=404, detail=f"Topic '{topic_id}' not found in curriculum")
+        logger.warning(
+            "[TOPIC] '%s' not in plan curriculum/daily_plan — attempting graceful AI generation from slug",
+            topic_id
+        )
+        # Derive a human-readable title from the slug
+        slug_title = topic_id.replace("-", " ").replace("_", " ").title()
+
+        # Detect topic category from the slug to build context-aware sub_topics
+        slug_lower = topic_id.lower()
+        is_behavioral = any(k in slug_lower for k in [
+            "conflict", "leadership", "culture", "ethical", "pressure",
+            "feedback", "adapt", "stakeholder", "goal", "failure", "team",
+            "behavioral", "star", "hr", "communication"
+        ])
+        is_dsa = any(k in slug_lower for k in [
+            "array", "linked", "tree", "graph", "dynamic", "sorting",
+            "search", "stack", "queue", "hash", "recursion"
+        ])
+
+        if is_behavioral:
+            sub_topics = [
+                {"id": f"{topic_id}-star", "title": f"STAR Method for {slug_title}"},
+                {"id": f"{topic_id}-examples", "title": f"Example Scenarios: {slug_title}"},
+                {"id": f"{topic_id}-pitfalls", "title": f"Common Mistakes in {slug_title} Interviews"},
+            ]
+            difficulty = "medium"
+        elif is_dsa:
+            sub_topics = [
+                {"id": f"{topic_id}-fundamentals", "title": f"{slug_title} Fundamentals"},
+                {"id": f"{topic_id}-patterns", "title": f"Common {slug_title} Patterns"},
+                {"id": f"{topic_id}-practice", "title": f"{slug_title} Practice Problems"},
+            ]
+            difficulty = "medium"
+        else:
+            sub_topics = [
+                {"id": f"{topic_id}-core", "title": f"Core {slug_title} Concepts"},
+                {"id": f"{topic_id}-advanced", "title": f"Advanced {slug_title} Patterns"},
+                {"id": f"{topic_id}-interview", "title": f"{slug_title} in Interviews"},
+            ]
+            difficulty = "medium"
+
+        topic_data = {
+            "title": slug_title,
+            "mastery_time_minutes": 45,
+            "difficulty": difficulty,
+        }
 
     # 4. Build context for Prompt 2
     known_skills = []
@@ -366,3 +414,127 @@ def reset_topic_content(
     except Exception:
         db.rollback()
     return {"status": "cleared", "topic_id": topic_id}
+
+
+# ─────────────────────────────────────────────────────────
+# STAR Method Evaluator  
+# ─────────────────────────────────────────────────────────
+
+class STARRequest(dict):
+    pass
+
+from pydantic import BaseModel
+from typing import Optional
+
+class STAREvaluateRequest(BaseModel):
+    topic_id: str
+    behavioral_question: str
+    student_answer: str
+    target_role: Optional[str] = "General"
+    company: Optional[str] = ""
+
+class STAREvaluateResponse(BaseModel):
+    overall_score: int  # 0-100
+    grade: str          # "Excellent", "Good", "Needs Work", "Incomplete"
+    situation_feedback: str
+    task_feedback: str
+    action_feedback: str
+    result_feedback: str
+    strengths: list[str]
+    improvements: list[str]
+    improved_answer_hint: str
+    is_behavioral: bool
+
+
+@router.post("/star-evaluate", response_model=STAREvaluateResponse)
+def evaluate_star_response(
+    payload: STAREvaluateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Evaluate a student's STAR behavioral answer using AI.
+    Returns structured feedback on each STAR component.
+    """
+    from app.core.config import settings
+
+    gemini_api_key = getattr(settings, "GEMINI_API_KEY", "").strip()
+    if not gemini_api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    system_prompt = """
+You are an expert behavioral interview coach specializing in the STAR method.
+Evaluate the student's behavioral answer and respond with a JSON object.
+
+STAR Components:
+- Situation: Sets context (when, where, what was happening)
+- Task: Student's specific responsibility
+- Action: Specific steps the student personally took (use "I" not "we")
+- Result: Measurable, quantified outcome
+
+Return JSON with exactly these fields:
+{
+  "overall_score": <integer 0-100>,
+  "grade": "Excellent" | "Good" | "Needs Work" | "Incomplete",
+  "situation_feedback": "<feedback on Situation component>",
+  "task_feedback": "<feedback on Task component>",
+  "action_feedback": "<feedback on Action component>",
+  "result_feedback": "<feedback on Result component>",
+  "strengths": ["<strength 1>", "<strength 2>"],
+  "improvements": ["<area to improve 1>", "<area to improve 2>"],
+  "improved_answer_hint": "<one concrete tip to make the answer stronger>",
+  "is_behavioral": true
+}
+
+Scoring guide:
+- 80-100 (Excellent): Clear S/T/A/R with measurable result
+- 60-79 (Good): Most components present but result not quantified
+- 40-59 (Needs Work): Missing key component or too vague
+- 0-39 (Incomplete): Answer does not follow STAR structure
+"""
+
+    user_message = json.dumps({
+        "behavioral_question": payload.behavioral_question,
+        "student_answer": payload.student_answer,
+        "target_role": payload.target_role,
+        "company": payload.company,
+        "topic": payload.topic_id,
+    }, ensure_ascii=False)
+
+    full_prompt = f"{system_prompt}\n\nStudent response to evaluate:\n{user_message}"
+
+    try:
+        from google import genai as new_genai
+        from google.genai import types as genai_types
+
+        client = new_genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=full_prompt,
+            config=genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.3,
+                max_output_tokens=2048,
+            ),
+        )
+        raw = response.text or "{}"
+        # Strip markdown fences if present
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            stripped = stripped.split("\n", 1)[-1]
+            stripped = stripped.rsplit("```", 1)[0].strip()
+        result = json.loads(stripped)
+        return STAREvaluateResponse(
+            overall_score=result.get("overall_score", 50),
+            grade=result.get("grade", "Needs Work"),
+            situation_feedback=result.get("situation_feedback", "No feedback available."),
+            task_feedback=result.get("task_feedback", "No feedback available."),
+            action_feedback=result.get("action_feedback", "No feedback available."),
+            result_feedback=result.get("result_feedback", "No feedback available."),
+            strengths=result.get("strengths", []),
+            improvements=result.get("improvements", []),
+            improved_answer_hint=result.get("improved_answer_hint", ""),
+            is_behavioral=True,
+        )
+    except Exception as exc:
+        logger.error("[STAR] AI evaluation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"STAR evaluation failed: {str(exc)}")

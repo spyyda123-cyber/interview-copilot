@@ -513,12 +513,12 @@ def generate_learning_plan(context: dict) -> dict:
                 last_error = exc
                 logger.error("[GPT5-PLAN] Unexpected error attempt %d – %s", attempt, exc)
 
-    # All attempts failed — return fallback plan
+    # All attempts failed — throw error so router can fall back to Gemini
     logger.error(
-        "[GPT5-PLAN] All GPT-5 attempts failed. last_error=%s. Returning fallback.",
+        "[GPT5-PLAN] All GPT-5 attempts failed. last_error=%s. Raising error to router.",
         last_error,
     )
-    return _create_fallback_plan(context), None
+    raise OpenAIProviderError(f"All OpenAI attempts failed: {last_error}")
 
 
 # ---------------------------------------------------------------------------

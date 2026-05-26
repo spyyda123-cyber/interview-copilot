@@ -24,6 +24,9 @@ import {
   getTopicContent,
   getStudyProgress,
   syncTopicProgress,
+  evaluateSTARResponse,
+  executeCode,
+  type STAREvaluateResponse,
   type TopicContent,
   type PlanDetailResponse,
   type DailyPlanItem,
@@ -1374,6 +1377,15 @@ function Screen3TopicDetail({
   const [error, setError] = useState<string | null>(null);
   const [topicLoadingStep, setTopicLoadingStep] = useState(0);
 
+  // STAR Method Practice state
+  const [starAnswer, setStarAnswer] = useState("");
+  const [starQuestion, setStarQuestion] = useState("");
+  const [starEvaluating, setStarEvaluating] = useState(false);
+  const [starResult, setStarResult] = useState<STAREvaluateResponse | null>(null);
+  const [starError, setStarError] = useState<string | null>(null);
+  const [showStarPractice, setShowStarPractice] = useState(false);
+  const [selectedStarQuestion, setSelectedStarQuestion] = useState<string | null>(null);
+
   // Dynamic loader simulation for the premium overlay
   useEffect(() => {
     if (!loading) {
@@ -1565,7 +1577,7 @@ function Screen3TopicDetail({
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: 0 }}>{c.title}</h4>
-                  {isRead && <Badge label="Read ✓" color={C.greenLight} bg={C.greenBg} />}
+                  {isRead && <Badge label="Read" color="#000000" bg={C.greenBg} />}
                 </div>
                 <p style={{ fontSize: 12, color: C.textDim, margin: "0 0 12px", lineHeight: 1.5 }}>{c.desc}</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: C.purpleLight }}>
@@ -1601,17 +1613,29 @@ function Screen3TopicDetail({
           </h3>
           <div style={{ display: "flex", flexDirection: "column" as const, gap: 8, marginBottom: 14 }}>
             {practiceItems.map((p, i) => {
-              const isCode = p.taskType === "code";
+              const isCode = p.taskType?.toLowerCase() === "code" || p.taskType?.toLowerCase() === "coding";
               const storedPct = (isCode && studentId && targetId && topicId) ? localStorage.getItem(`coding_pct_${studentId}_${targetId}_${topicId}`) : null;
               const pct = storedPct ? parseInt(storedPct) : 0;
 
               return (
                 <div
                   key={i}
-                  onClick={() => onNavigate("coding", {
-                    practiceTask: p.taskType === "code" ? topicContent?.practice_tasks?.find(t => t.task_type === "code") ?? null : null,
-                    topicId: topicId,
-                  })}
+                  onClick={() => {
+                    if (isCode) {
+                      const task = topicContent?.practice_tasks?.find((t: any) => 
+                        t.id === p.taskId || 
+                        t.task_type?.toLowerCase() === "code" || 
+                        t.task_type?.toLowerCase() === "coding" ||
+                        t.taskType?.toLowerCase() === "code"
+                      );
+                      onNavigate("coding", {
+                        practiceTask: task || null,
+                        topicId: topicId,
+                      });
+                    } else {
+                      alert("This is a non-coding task. Please select a coding task to practice coding.");
+                    }
+                  }}
                   style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.surface, borderRadius: 8, cursor: "pointer" }}
                 >
                   <div style={{ width: 28, height: 28, borderRadius: "50%", background: pct === 100 ? "#edffd6" : C.purpleDim, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1637,8 +1661,10 @@ function Screen3TopicDetail({
             })}
           </div>
           <button
-            onClick={() => onNavigate("coding", {
-              practiceTask: topicContent?.practice_tasks?.find(t => t.task_type === "code") ?? null,
+          onClick={() => onNavigate("coding", {
+              practiceTask: topicContent?.practice_tasks?.find(
+                (t: any) => t.task_type?.toLowerCase() === "code" || t.task_type?.toLowerCase() === "coding"
+              ) ?? null,
               topicId: topicId,
             })}
             style={{ width: "100%", padding: "8px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
@@ -1694,6 +1720,8 @@ function Screen3TopicDetail({
       })()}
       </div>
 
+
+
       {/* Premium Blur Overlay for Topic Generation */}
       {loading && (
         <div
@@ -1725,8 +1753,19 @@ function Screen3TopicDetail({
               textAlign: "center",
               backdropFilter: "blur(20px)",
               animation: "fadeInUp 0.4s ease both",
+              position: "relative",
             }}
           >
+            {/* Back Button inside loader */}
+            <div style={{ position: "absolute", top: 16, left: 16 }}>
+              <button 
+                onClick={() => onNavigate("plan")}
+                style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: C.textMuted, fontSize: 13, fontWeight: 600 }}
+              >
+                ← Back
+              </button>
+            </div>
+
             {/* Spinner & Zap */}
             <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 24px", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{
@@ -2208,11 +2247,13 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
   );
   const [activeTab, setActiveTab] = useState<"console" | "output" | "tests">("tests");
   const [running, setRunning] = useState(false);
-  const [testResults, setTestResults] = useState<{ label: string; passed: boolean; input: string; expected: string; got: string }[]>([]);
+  const [testResults, setTestResults] = useState<{ label: string; passed: boolean; input: string; expected: string; got: string; stderr?: string | null; execution_time?: string | null }[]>([]);
   const [allTestsVisible, setAllTestsVisible] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(42 * 60 + 15);
   const [showHint, setShowHint] = useState(false);
+  const [consoleOutput, setConsoleOutput] = useState<string>("");
+  const [execError, setExecError] = useState<string | null>(null);
 
   useEffect(() => {
     const sid = sessionStorage.getItem("student_id");
@@ -2239,36 +2280,60 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
   // Visible test cases: first 2 initially, all after passing initial 2
   const visibleTests = allTestsVisible ? allTestCases : allTestCases.slice(0, INITIAL_VISIBLE);
 
-  const handleRunTests = () => {
-    if (visibleTests.length === 0) return;
+  const handleRunTests = async () => {
+    if (visibleTests.length === 0) {
+      setExecError("No test cases available. The AI needs to generate them first.");
+      setActiveTab("console");
+      return;
+    }
     setRunning(true);
     setActiveTab("tests");
-    setTimeout(() => {
-      setRunning(false);
-      // Simulate test execution &mdash; in production this would call a code execution API
-      const results = visibleTests.map((tc, i) => {
-        const trimmedCode = code.trim();
-        const starter = LANGUAGE_CONFIGS[selectedLang].starter(problemTitle, practiceTask?.method_signatures).trim();
-        // Require at least 20 characters of new code beyond the starter boilerplate
-        const hasImplementation = trimmedCode.length > starter.length + 20;
-        const isPassed = hasImplementation && Math.random() > 0.2;
+    setExecError(null);
+    setConsoleOutput("");
 
-        return {
-          label: tc.label || `Test ${i + 1}`,
-          passed: isPassed,
+    try {
+      const response = await executeCode({
+        language: selectedLang,
+        source_code: code,
+        test_cases: visibleTests.map(tc => ({
+          label: tc.label || "Test",
           input: tc.input,
-          expected: tc.expected_output,
-          got: isPassed ? tc.expected_output : "No implementation found / Error",
-        };
+          expected_output: tc.expected_output,
+        })),
+        problem_title: problemTitle,
       });
+
+      const results = response.results.map(r => ({
+        label: r.label,
+        passed: r.passed,
+        input: r.input,
+        expected: r.expected,
+        got: r.got,
+        stderr: r.stderr,
+        execution_time: r.execution_time,
+      }));
       setTestResults(results);
 
-      // Progressive reveal: if all visible tests pass, show remaining tests
+      // Build console output from stderr / compile errors
+      const consoleLines = response.results
+        .filter(r => r.stderr || r.compile_error)
+        .map(r => `[${r.label}] ${r.compile_error || r.stderr || ""}`.trim())
+        .join("\n");
+      setConsoleOutput(consoleLines);
+
+      // Progressive reveal: if all visible tests pass, unlock remaining tests
       const allPassed = results.every(r => r.passed);
       if (allPassed && !allTestsVisible && allTestCases.length > INITIAL_VISIBLE) {
         setTimeout(() => setAllTestsVisible(true), 500);
       }
-    }, 1800);
+    } catch (err: any) {
+      const msg = err?.message ?? "Code execution failed. Check your internet connection.";
+      setExecError(msg);
+      setConsoleOutput(msg);
+      setActiveTab("console");
+    } finally {
+      setRunning(false);
+    }
   };
 
   const passedCount = testResults.filter(r => r.passed).length;
@@ -2372,7 +2437,17 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
             <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: 0 }}>{problemTitle}</h2>
           </div>
           <div style={{ flex: 1, overflowY: "auto" as const, padding: "14px 18px" }} className="sp-scroll">
-            <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.7, marginBottom: 14 }}>{problemStatement}</p>
+            {(!practiceTask || problemStatement === "Solve the coding problem below.") ? (
+              <div style={{ padding: "16px", background: "rgba(99,71,255,0.05)", border: "1.5px dashed rgba(99,71,255,0.2)", borderRadius: 10, marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleLight, marginBottom: 6 }}>⚠️ No AI problem loaded</div>
+                <p style={{ fontSize: 12, color: C.textMuted, margin: 0, lineHeight: 1.6 }}>
+                  The AI-generated problem description and test cases were not passed to this screen.<br />
+                  Please go <strong>Back</strong> to the topic page and click the coding practice task again — it should now load properly after the cache has been cleared.
+                </p>
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.7, marginBottom: 14 }}>{problemStatement}</p>
+            )}
 
             {constraints.length > 0 && (
               <div style={{ background: C.surface, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
@@ -2482,8 +2557,27 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
               )}
             </div>
             <div style={{ flex: 1, overflowY: "auto" as const, padding: "8px 14px" }} className="sp-scroll">
-              {activeTab === "console" && <p style={{ fontSize: 12, color: C.textDim, fontFamily: "monospace", margin: 0 }}>Console output will appear here...</p>}
-              {activeTab === "output" && <p style={{ fontSize: 12, color: C.textDim, fontFamily: "monospace", margin: 0 }}>Run tests to see output...</p>}
+              {activeTab === "console" && (
+                <pre style={{ fontSize: 12, color: execError ? C.red : C.textDim, fontFamily: "monospace", margin: 0, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const }}>
+                  {consoleOutput || (execError ? execError : "Console output will appear here after you run tests...")}
+                </pre>
+              )}
+              {activeTab === "output" && (
+                <div>
+                  {testResults.length === 0 ? (
+                    <p style={{ fontSize: 12, color: C.textDim, fontFamily: "monospace", margin: 0 }}>Run tests to see output...</p>
+                  ) : (
+                    testResults.map((r, i) => (
+                      <div key={i} style={{ marginBottom: 8, padding: "6px 10px", background: r.passed ? "rgba(217,243,110,0.15)" : "rgba(220,38,38,0.07)", borderRadius: 8, border: `1px solid ${r.passed ? "rgba(217,243,110,0.4)" : "rgba(220,38,38,0.2)"}` }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: r.passed ? "#22aa55" : C.red, marginBottom: 3 }}>{r.passed ? "✓" : "✗"} {r.label}</div>
+                        <div style={{ fontSize: 11, fontFamily: "monospace", color: C.textMuted }}>Your output: <code>{r.got || "(empty)"}</code></div>
+                        {!r.passed && <div style={{ fontSize: 11, fontFamily: "monospace", color: C.amber }}>Expected: <code>{r.expected}</code></div>}
+                        {r.execution_time && <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>Time: {r.execution_time}s</div>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
               {activeTab === "tests" && (
                 <div>
                   {testResults.length === 0 ? (
@@ -3449,9 +3543,9 @@ export default function StudyPlanPage() {
   };
 
   // -- Navigation helper --
-  const navigate = (screen: string, extra?: Record<string, unknown>) => {
+  const navigate = (screen: string, extra?: Record<string, any>) => {
     setProgressVersion(v => v + 1);
-    setNav({ screen: screen as Screen, extra });
+    setNav({ screen: screen as Screen, ...(extra || {}), extra });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -3574,14 +3668,20 @@ export default function StudyPlanPage() {
           />
         );
       case "coding":
-        return <Screen6Coding onNavigate={navigate} practiceTask={nav.practiceTask} topicId={nav.topicId} />;
+        return (
+          <Screen6Coding
+            onNavigate={navigate}
+            practiceTask={nav.practiceTask || nav.extra?.practiceTask}
+            topicId={nav.topicId || nav.extra?.topicId}
+          />
+        );
       case "quiz":
         return (
           <Screen7Quiz
-            quizTopic={nav.quizTopic || "Technical Quiz"}
-            quizQuestions={nav.quizQuestions}
+            quizTopic={nav.quizTopic || nav.extra?.quizTopic || "Technical Quiz"}
+            quizQuestions={nav.quizQuestions || nav.extra?.quizQuestions}
             onNavigate={navigate}
-            onQuizComplete={nav.onQuizComplete}
+            onQuizComplete={nav.onQuizComplete || nav.extra?.onQuizComplete}
           />
         );
       default:

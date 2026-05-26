@@ -9,6 +9,7 @@ type UserClaims = {
   sub: string;
   role: string;
   college_id?: string;
+  exp?: number;
 };
 
 type AuthContextType = {
@@ -61,7 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (storedToken) {
       try {
         const claims = decodePayload(storedToken);
-        if (claims.role === "COLLEGE_ADMIN") {
+        const isExpired = claims.exp ? claims.exp * 1000 < Date.now() : false;
+
+        if (claims.role === "COLLEGE_ADMIN" && !isExpired) {
           setToken(storedToken);
           setUser(claims);
           setAuthToken(storedToken);

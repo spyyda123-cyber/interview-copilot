@@ -399,6 +399,7 @@ const apiFetch = async <T>(path: string, options?: RequestInit) => {
     
     response = await fetch(buildUrl(path), {
       ...options,
+      cache: "no-store",
       signal: controller.signal,
       headers: {
         ...(isFormData ? {} : { "Accept": "application/json" }),  // Don't set Accept for FormData
@@ -799,5 +800,80 @@ export const activateCompany = async (studentId: number, companyId: string) => {
 export const resetPrepPlan = async (studentId: number, targetId: number) => {
   return apiFetch<PrepGenerateResponse>(`/prep/reset/${studentId}?target_id=${targetId}`, {
     method: "DELETE",
+  });
+};
+
+// ── STAR Method Evaluation ───────────────────────────────────────────────────
+
+export type STAREvaluateRequest = {
+  topic_id: string;
+  behavioral_question: string;
+  student_answer: string;
+  target_role?: string;
+  company?: string;
+};
+
+export type STAREvaluateResponse = {
+  overall_score: number;
+  grade: "Excellent" | "Good" | "Needs Work" | "Incomplete";
+  situation_feedback: string;
+  task_feedback: string;
+  action_feedback: string;
+  result_feedback: string;
+  strengths: string[];
+  improvements: string[];
+  improved_answer_hint: string;
+  is_behavioral: boolean;
+};
+
+export const evaluateSTARResponse = async (
+  payload: STAREvaluateRequest
+): Promise<STAREvaluateResponse> => {
+  return apiFetch<STAREvaluateResponse>("/topic/star-evaluate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+};
+
+
+// ── Judge0 Code Execution ─────────────────────────────────────────────────────
+
+export type ExecuteTestCase = {
+  label: string;
+  input: string;
+  expected_output: string;
+};
+
+export type ExecuteRequest = {
+  language: string;
+  source_code: string;
+  test_cases: ExecuteTestCase[];
+  problem_title?: string;
+};
+
+export type ExecuteTestResult = {
+  label: string;
+  passed: boolean;
+  input: string;
+  expected: string;
+  got: string;
+  stderr?: string | null;
+  compile_error?: string | null;
+  execution_time?: string | null;
+};
+
+export type ExecuteResponse = {
+  results: ExecuteTestResult[];
+  passed_count: number;
+  total_count: number;
+  success_rate: number;
+};
+
+export const executeCode = async (payload: ExecuteRequest): Promise<ExecuteResponse> => {
+  return apiFetch<ExecuteResponse>("/execute/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 };
