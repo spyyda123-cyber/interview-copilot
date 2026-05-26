@@ -2321,10 +2321,40 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
         .join("\n");
       setConsoleOutput(consoleLines);
 
-      // Progressive reveal: if all visible tests pass, unlock remaining tests
+      // Progressive reveal: if all visible tests pass, unlock remaining tests and auto-run them
       const allPassed = results.every(r => r.passed);
       if (allPassed && !allTestsVisible && allTestCases.length > INITIAL_VISIBLE) {
-        setTimeout(() => setAllTestsVisible(true), 500);
+        // Unlock all tests
+        setAllTestsVisible(true);
+        // Auto-run the remaining tests after a short pause (lets Judge0 rate limit recover)
+        setTimeout(async () => {
+          const remainingTests = allTestCases.slice(INITIAL_VISIBLE);
+          try {
+            const remainingResponse = await executeCode({
+              language: selectedLang,
+              source_code: code,
+              test_cases: remainingTests.map(tc => ({
+                label: tc.label || "Test",
+                input: tc.input,
+                expected_output: tc.expected_output,
+              })),
+              problem_title: problemTitle,
+            });
+            const remainingResults = remainingResponse.results.map(r => ({
+              label: r.label,
+              passed: r.passed,
+              input: r.input,
+              expected: r.expected,
+              got: r.got,
+              stderr: r.stderr,
+              execution_time: r.execution_time,
+            }));
+            // Merge: first 2 results + remaining results
+            setTestResults(prev => [...prev, ...remainingResults]);
+          } catch {
+            // If remaining tests fail to run, just show them as unlocked (user can retry)
+          }
+        }, 2000);
       }
     } catch (err: any) {
       const msg = err?.message ?? "Code execution failed. Check your internet connection.";
@@ -2655,10 +2685,10 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
                           return (
                             <div key={i} style={{ 
                               fontSize: 11, 
-                              color: C.textDim, 
+                              color: allTestsVisible ? C.text : C.textDim, 
                               padding: "6px 10px", 
-                              background: "rgba(0,0,0,0.01)", 
-                              border: `1.5px dashed ${C.border}`,
+                              background: allTestsVisible ? C.surface : "rgba(0,0,0,0.01)", 
+                              border: `1.5px ${allTestsVisible ? "solid" : "dashed"} ${allTestsVisible ? C.border : C.border}`,
                               borderRadius: 8,
                               display: "flex",
                               alignItems: "center",
@@ -2667,9 +2697,16 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
                               <span>
                                 <strong>{tc.label || `Test ${i + 1}`}:</strong> <code style={{ background: "rgba(0,0,0,0.02)", padding: "2px 4px", borderRadius: 4 }}>{tc.input}</code>
                               </span>
-                              <span style={{ fontSize: 10, color: C.amber, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
-                                🔒 Locked
-                              </span>
+                              {allTestsVisible ? (
+                                <span style={{ fontSize: 10, color: C.purpleLight, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                                  <div style={{ width: 10, height: 10, border: `2px solid ${C.purpleLight}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                                  Running…
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 10, color: C.amber, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
+                                  🔒 Locked
+                                </span>
+                              )}
                             </div>
                           );
                         }
@@ -2688,7 +2725,7 @@ function Screen6Coding({ onNavigate, practiceTask, topicId }: {
                           marginTop: 10,
                           boxShadow: "0 4px 12px rgba(217,243,110,0.2)"
                         }}>
-                          🚀 <strong>Initial 2 tests passed!</strong> The remaining {allTestCases.length - INITIAL_VISIBLE} advanced test cases are now unlocked. Click <strong>"Run Tests"</strong> again to verify your solution against them!
+                          🚀 <strong>Initial 2 tests passed!</strong> Unlocking and running the remaining {allTestCases.length - INITIAL_VISIBLE} advanced test cases automatically…
                         </div>
                       )}
                     </div>

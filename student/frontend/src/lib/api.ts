@@ -937,26 +937,40 @@ console.log(JSON.stringify(_result) !== undefined ? JSON.stringify(_result) : St
     return { source, stdin: input };
   };
 
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
   const submitOne = async (tc: ExecuteTestCase): Promise<ExecuteTestResult> => {
     const { source: runnableSource, stdin } = buildRunnable(payload.language, payload.source_code, tc.input);
 
-    const submitRes = await fetch(
-      `${JUDGE0_BASE}/submissions?base64_encoded=true&wait=false`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language_id: langId,
-          source_code: b64(runnableSource),
-          stdin: b64(stdin),
-          base64_encoded: true,
-          wait: false,
-        }),
+    // Retry submit up to 3 times with backoff on 429 rate limit
+    let token: string | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await sleep(attempt * 2000); // 2s, 4s backoff
+      const submitRes = await fetch(
+        `${JUDGE0_BASE}/submissions?base64_encoded=true&wait=false`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            language_id: langId,
+            source_code: b64(runnableSource),
+            stdin: b64(stdin),
+            base64_encoded: true,
+            wait: false,
+          }),
+        }
+      );
+      if (submitRes.status === 429) {
+        // Rate limited — wait and retry
+        await sleep(3000);
+        continue;
       }
-    );
-    if (!submitRes.ok) throw new Error(`Judge0 submit failed: ${submitRes.status}`);
-    const { token } = await submitRes.json();
-    if (!token) throw new Error("No token from Judge0");
+      if (!submitRes.ok) throw new Error(`Judge0 submit failed: ${submitRes.status}`);
+      const body = await submitRes.json();
+      token = body.token ?? null;
+      if (token) break;
+    }
+    if (!token) throw new Error("No token from Judge0 after retries");
 
     // Poll until done (max 20s)
     for (let i = 0; i < 20; i++) {
@@ -1025,10 +1039,11 @@ console.log(JSON.stringify(_result) !== undefined ? JSON.stringify(_result) : St
     };
   };
 
-  // Run test cases sequentially (Judge0 free tier rate-limited)
+  // Run test cases sequentially with a small gap to avoid Judge0 rate limits
   const results: ExecuteTestResult[] = [];
-  for (const tc of payload.test_cases) {
-    results.push(await submitOne(tc));
+  for (let i = 0; i < payload.test_cases.length; i++) {
+    if (i > 0) await sleep(1500); // 1.5s between submissions
+    results.push(await submitOne(payload.test_cases[i]));
   }
 
   const passed_count = results.filter(r => r.passed).length;
