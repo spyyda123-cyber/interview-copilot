@@ -4,10 +4,14 @@ export default function StatusBadge({ status }: { status: Status | string }) {
   const normalized = status.toUpperCase() as Status;
   const style =
     normalized === "ACTIVE"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      ? "bg-[#f7ffe0] text-[#222222] border-[#d9f36e]"
       : normalized === "INACTIVE"
-      ? "bg-slate-100 text-slate-700 border-slate-300"
-      : "bg-amber-50 text-amber-700 border-amber-200";
+      ? "bg-[#f3f3f3] text-[#555555] border-[#e8e8e8]"
+      : "bg-[#fff8e1] text-[#b45309] border-[#fcd34d]";
 
-  return <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${style}`}>{normalized}</span>;
+  return (
+    <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${style}`}>
+      {normalized}
+    </span>
+  );
 }

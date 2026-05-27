@@ -71,6 +71,7 @@ export default function SignupPage() {
                 onChange={(e) => setFirstName(e.target.value)}
                 required
                 placeholder="enter first name"
+                suppressHydrationWarning
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -82,6 +83,7 @@ export default function SignupPage() {
                 onChange={(e) => setLastName(e.target.value)}
                 required
                 placeholder="enter last name"
+                suppressHydrationWarning
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               />
             </div>
@@ -95,6 +97,7 @@ export default function SignupPage() {
               onChange={(e) => setRollNumber(e.target.value)}
               required
               placeholder="e.g. 21CS101"
+              suppressHydrationWarning
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             />
           </div>
@@ -107,6 +110,7 @@ export default function SignupPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@college.edu"
+              suppressHydrationWarning
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             />
           </div>
@@ -118,6 +122,7 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              suppressHydrationWarning
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             />
           </div>

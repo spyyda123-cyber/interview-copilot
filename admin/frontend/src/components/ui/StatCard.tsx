@@ -5,20 +5,22 @@ type StatCardProps = {
   variant?: "default" | "warning" | "danger";
 };
 
-const variantClass: Record<NonNullable<StatCardProps["variant"]>, string> = {
-  default: "border-[var(--color-border)]",
-  warning: "border-[var(--color-warning)]/40",
-  danger: "border-[var(--color-danger)]/40",
+const variantStyles: Record<NonNullable<StatCardProps["variant"]>, string> = {
+  default: "border-[#e8e8e8]",
+  warning: "border-[#f59e0b]/40",
+  danger: "border-[#ef4444]/40",
 };
 
 export default function StatCard({ label, value, icon, variant = "default" }: StatCardProps) {
   return (
-    <div className={`rounded-xl border bg-[var(--color-surface)] p-4 ${variantClass[variant]}`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
-        {icon ? <span className="text-xs text-[var(--color-text-secondary)]">{icon}</span> : null}
+    <div className={`rounded-xl border bg-white p-5 flex flex-col justify-between h-[120px] ${variantStyles[variant]}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold tracking-[0.1em] text-[#888888] uppercase">{label}</p>
+        {icon ? <span className="text-xs text-[#888888]">{icon}</span> : null}
       </div>
-      <p className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">{value}</p>
+      <div>
+        <p className="text-3xl font-bold text-[#222222] leading-none mb-1">{value}</p>
+      </div>
     </div>
   );
 }

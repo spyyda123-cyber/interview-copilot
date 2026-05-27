@@ -426,6 +426,23 @@ export async function uploadStudentDatabase(file: File) {
   });
 }
 
+export type SingleStudentCreate = {
+  roll_no: string;
+  name: string;
+  department: string;
+  cgpa: number;
+  backlogs: number;
+  email: string;
+};
+
+export async function addSingleStudent(payload: SingleStudentCreate) {
+  return authFetch<StudentDatabaseRecord>("/student-db/add", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 
 export type CompanyCreate = {
   company_name: string;

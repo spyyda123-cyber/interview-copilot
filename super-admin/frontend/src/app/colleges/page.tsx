@@ -179,43 +179,33 @@ export default function CollegesPage() {
         action={
           <button
             onClick={() => setOnboardOpen(true)}
-            className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
+            className="rounded-lg bg-[#222222] px-4 py-2 text-sm font-bold text-[#d9f36e] hover:bg-[#d9f36e] hover:text-[#222222] transition-colors"
           >
             Onboard New College
           </button>
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#e8e8e8] bg-white p-4 md:grid-cols-3">
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Search college or admin email"
-          className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm"
+          className="rounded-lg border border-[#e8e8e8] bg-[#f3f3f3] px-3 py-2 text-sm text-[#222222] focus:outline-none focus:border-[#d9f36e]"
         />
-
         <select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm"
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          className="rounded-lg border border-[#e8e8e8] bg-[#f3f3f3] px-3 py-2 text-sm text-[#222222] focus:outline-none focus:border-[#d9f36e]"
         >
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
           <option value="INACTIVE">Inactive</option>
         </select>
-
         <button
           type="button"
-          onClick={() => {
-            setSearchInput("");
-            setSearch("");
-            setStatusFilter("");
-            setPage(1);
-          }}
-          className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm"
+          onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setPage(1); }}
+          className="rounded-lg border border-[#e8e8e8] bg-[#f3f3f3] px-3 py-2 text-sm text-[#555555] hover:bg-[#e8e8e8] transition-colors"
         >
           Clear Filters
         </button>
@@ -236,7 +226,7 @@ export default function CollegesPage() {
             key: "name",
             header: "College Name",
             render: (row) => (
-              <Link href={`/colleges/${row.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
+              <Link href={`/colleges/${row.id}`} className="font-semibold text-[#222222] hover:underline">
                 {row.name}
               </Link>
             ),

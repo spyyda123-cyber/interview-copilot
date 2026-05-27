@@ -72,6 +72,46 @@ def list_student_db_records(
         "per_page": per_page,
     }
 
+def add_single_student(db: Session, college_id: UUID, payload) -> StudentDatabaseRecord:
+    """Upsert a single student record by email."""
+    from fastapi import HTTPException
+
+    email = payload.email.strip().lower()
+    if not email or not payload.roll_no.strip() or not payload.name.strip():
+        raise HTTPException(status_code=400, detail="email, roll_no, and name are required.")
+
+    existing = db.query(StudentDatabaseRecord).filter(
+        StudentDatabaseRecord.college_id == college_id,
+        StudentDatabaseRecord.email == email,
+    ).first()
+
+    if existing:
+        existing.roll_no = payload.roll_no.strip()
+        existing.name = payload.name.strip()
+        existing.department = payload.department.strip() or "-"
+        existing.cgpa = float(payload.cgpa)
+        existing.backlogs = int(payload.backlogs)
+        existing.status = "Active"
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        record = StudentDatabaseRecord(
+            college_id=college_id,
+            email=email,
+            roll_no=payload.roll_no.strip(),
+            name=payload.name.strip(),
+            department=payload.department.strip() or "-",
+            cgpa=float(payload.cgpa),
+            backlogs=int(payload.backlogs),
+            status="Active",
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record
+
+
 async def process_csv_upload(db: Session, college_id: UUID, file: UploadFile):
     content = await file.read()
     

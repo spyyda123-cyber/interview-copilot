@@ -10,16 +10,16 @@ type AlertBannerProps = {
 export default function AlertBanner({ message, variant = "info", linkText, linkHref }: AlertBannerProps) {
   const style =
     variant === "warning"
-      ? "border-amber-300 bg-amber-50 text-amber-800"
+      ? "border-[#fcd34d] bg-[#fff8e1] text-[#b45309]"
       : variant === "danger"
-      ? "border-red-300 bg-red-50 text-red-800"
-      : "border-blue-300 bg-blue-50 text-blue-800";
+      ? "border-red-200 bg-red-50 text-red-700"
+      : "border-[#d9f36e] bg-[#f7ffe0] text-[#222222]";
 
   return (
     <div className={`rounded-lg border px-4 py-3 text-sm ${style}`}>
       <span>{message}</span>
       {linkText && linkHref ? (
-        <Link href={linkHref} className="ml-2 font-medium underline">
+        <Link href={linkHref} className="ml-2 font-semibold underline">
           {linkText}
         </Link>
       ) : null}

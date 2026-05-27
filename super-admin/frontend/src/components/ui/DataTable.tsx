@@ -21,23 +21,26 @@ export default function DataTable<T>({
   emptyMessage = "No data available.",
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <table className="min-w-full divide-y divide-[var(--color-border)] text-sm">
-        <thead className="bg-[var(--color-surface-secondary)]">
+    <div className="overflow-hidden rounded-xl border border-[#e8e8e8] bg-white">
+      <table className="min-w-full divide-y divide-[#e8e8e8] text-sm">
+        <thead className="bg-[#f3f3f3]">
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={`px-4 py-3 text-left font-medium text-[var(--color-text-secondary)] ${column.className ?? ""}`}>
+              <th
+                key={column.key}
+                className={`px-4 py-3 text-left text-[10px] font-bold tracking-[0.1em] text-[#888888] uppercase ${column.className ?? ""}`}
+              >
                 {column.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[var(--color-border)]">
+        <tbody className="divide-y divide-[#e8e8e8]">
           {loading
             ? Array.from({ length: 5 }).map((_, index) => (
                 <tr key={`skeleton-${index}`}>
                   <td colSpan={columns.length} className="px-4 py-4">
-                    <div className="h-4 animate-pulse rounded bg-[var(--color-primary-light)]" />
+                    <div className="h-4 animate-pulse rounded bg-[#f3f3f3]" />
                   </td>
                 </tr>
               ))
@@ -45,7 +48,7 @@ export default function DataTable<T>({
 
           {!loading && rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-[var(--color-text-secondary)]">
+              <td colSpan={columns.length} className="px-4 py-10 text-center text-[#888888]">
                 {emptyMessage}
               </td>
             </tr>
@@ -53,9 +56,9 @@ export default function DataTable<T>({
 
           {!loading
             ? rows.map((row, rowIndex) => (
-                <tr key={rowIndex} className="hover:bg-[var(--color-surface-secondary)]/60">
+                <tr key={rowIndex} className="hover:bg-[#f7ffe0] transition-colors">
                   {columns.map((column) => (
-                    <td key={column.key} className={`px-4 py-3 text-[var(--color-text-primary)] ${column.className ?? ""}`}>
+                    <td key={column.key} className={`px-4 py-3 text-[#222222] ${column.className ?? ""}`}>
                       {column.render(row)}
                     </td>
                   ))}

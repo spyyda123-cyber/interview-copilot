@@ -65,6 +65,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="enter your email"
+              suppressHydrationWarning
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             />
           </div>
@@ -77,6 +78,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="••••••••"
+              suppressHydrationWarning
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             />
           </div>
@@ -85,6 +87,7 @@ export default function LoginPage() {
             <button 
               type="submit" 
               disabled={loading}
+              suppressHydrationWarning
               className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-sm font-semibold rounded-lg shadow-sm transition-colors flex justify-center items-center"
             >
               {loading ? <span className="flex items-center gap-2"><LoadingSpinner /> Signing in...</span> : "Sign in"}

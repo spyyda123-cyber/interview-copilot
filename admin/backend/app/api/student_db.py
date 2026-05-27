@@ -1,12 +1,23 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, File, UploadFile
 from sqlalchemy.orm import Session
-from app.schemas.student_db import StudentDatabaseListResponse, UploadResult
+from app.schemas.student_db import StudentDatabaseListResponse, StudentDatabaseResponse, UploadResult
 from app.services import student_db_service
 from shared.auth.dependencies import get_college_scope, require_college_admin
 from shared.db.session import get_db
+from pydantic import BaseModel
 
 router = APIRouter(tags=["Student DB"], dependencies=[Depends(require_college_admin)])
+
+
+class SingleStudentCreate(BaseModel):
+    roll_no: str
+    name: str
+    department: str
+    cgpa: float
+    backlogs: int
+    email: str
+
 
 @router.get("", response_model=StudentDatabaseListResponse)
 def list_student_db_records(
@@ -27,6 +38,17 @@ def list_student_db_records(
         page,
         per_page,
     )
+
+
+@router.post("/add", response_model=StudentDatabaseResponse)
+def add_single_student(
+    payload: SingleStudentCreate,
+    db: Session = Depends(get_db),
+    college_id: UUID = Depends(get_college_scope),
+):
+    """Add or update a single student record."""
+    return student_db_service.add_single_student(db, college_id, payload)
+
 
 @router.post("/upload", response_model=UploadResult)
 async def upload_student_db(
