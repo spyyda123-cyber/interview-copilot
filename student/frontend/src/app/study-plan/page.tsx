@@ -2974,6 +2974,7 @@ function Screen7Quiz({
   quizQuestions,
   onNavigate,
   onQuizComplete,
+  hasCodingTask,
 }: {
   quizTopic: string;
   quizQuestions?: Array<{question: string; options: string[]; correct_index: number; explanation: string}>;
