@@ -40,6 +40,7 @@ type EnrichedCompany = CompanyListItem & {
   resolvedPackageMin?: number | null;
   resolvedPackageMax?: number | null;
   resolvedInterviewDate?: string | null;
+  target_id?: number | null;
 };
 
 export default function PlacementsPage() {
@@ -113,6 +114,7 @@ export default function PlacementsPage() {
             resolvedPackageMin: app?.package_min ?? company.package_min,
             resolvedPackageMax: app?.package_max ?? company.package_max,
             resolvedInterviewDate: app?.interview_date ?? company.interview_date,
+            target_id: app?.target_id ?? null,
           };
 
           let isEligible = true;
@@ -269,6 +271,9 @@ export default function PlacementsPage() {
           onClick={() => {
             sessionStorage.setItem("company_name", company.company_name);
             sessionStorage.setItem("role", company.role);
+            if (company.target_id) {
+              sessionStorage.setItem("target_id", String(company.target_id));
+            }
             router.push("/study-plan");
           }}
           className="flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition shadow-sm whitespace-nowrap"
@@ -369,46 +374,32 @@ export default function PlacementsPage() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800" style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}>
+          <h1 className="text-2xl font-bold text-[#222222]">
             Placements
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">Track your application status and preparation progress.</p>
-        </div>
-        <div className="flex items-center gap-2 text-emerald-500 text-sm font-medium">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" /> Connected
+          <p className="text-sm text-[#888888] mt-0.5">Track your application status and preparation progress.</p>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-white border-l-4 border-l-emerald-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Active (Approved)</p>
-          <p className="text-3xl font-light text-emerald-700">{approvedCount}</p>
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-white border border-[#e8e8e8] rounded-xl p-4">
+          <p className="text-[10px] font-bold text-[#888888] uppercase tracking-[0.1em] mb-2">Active (Approved)</p>
+          <p className="text-3xl font-bold text-[#222222]">{approvedCount}</p>
         </div>
-        <div className="bg-white border-l-4 border-l-amber-500 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Pending Approval</p>
-          <p className="text-3xl font-light text-amber-600">{pendingCount}</p>
+        <div className="bg-white border border-[#e8e8e8] rounded-xl p-4">
+          <p className="text-[10px] font-bold text-[#888888] uppercase tracking-[0.1em] mb-2">Pending Approval</p>
+          <p className="text-3xl font-bold text-[#b45309]">{pendingCount}</p>
         </div>
-        <div className="bg-white border-l-4 border-l-red-500 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Rejected</p>
-          <p className="text-3xl font-light text-red-600">{rejectedCount}</p>
+        <div className="bg-white border border-[#e8e8e8] rounded-xl p-4">
+          <p className="text-[10px] font-bold text-[#888888] uppercase tracking-[0.1em] mb-2">Rejected</p>
+          <p className="text-3xl font-bold text-red-600">{rejectedCount}</p>
         </div>
-        <div className="bg-white border-l-4 border-l-indigo-600 border-y border-y-slate-200 border-r border-r-slate-200 p-4 shadow-sm">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Activated</p>
-          <p className="text-3xl font-light text-indigo-700">{activatedCount}</p>
+        <div className="bg-white border border-[#e8e8e8] rounded-xl p-4">
+          <p className="text-[10px] font-bold text-[#888888] uppercase tracking-[0.1em] mb-2">Activated</p>
+          <p className="text-3xl font-bold text-[#222222]">{activatedCount}</p>
         </div>
       </div>
-
-      {/* Profile bar */}
-      {profile && (
-        <div className="bg-[#fcf8f2] border border-[#f5ead7] rounded-lg px-4 py-3 mb-6 flex items-center text-sm gap-2 flex-wrap">
-          <span className="font-bold text-slate-800">Your profile:</span>
-          <span className="text-slate-600">CGPA {profile.cgpa} · Backlogs {profile.backlogs} · Dept {profile.department} ·</span>
-          <span className={profile.is_verified ? "text-emerald-700 font-semibold" : "text-amber-600 font-semibold"}>
-            {profile.is_verified ? "Marksheet verified ✓" : "Pending verification"}
-          </span>
-        </div>
-      )}
 
       {/* Eligible companies section */}
       <div className="mb-10">

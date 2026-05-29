@@ -87,7 +87,8 @@ interview_traps:
 
 practice_tasks:
 - Minimum 2, maximum 3 per topic
-- Must include at least 1 task of type "code" if coding_required is true
+- If the topic is behavioral, leadership, HR, or non-technical (e.g. "Tell Me About Yourself"), you MUST NOT generate any tasks of type "code", regardless of the coding_required flag. All tasks must be "qa" or "mock".
+- Otherwise, must include at least 1 task of type "code" if coding_required is true
 - Must include at least 1 task of type "qa" regardless of role
 - task_type must be one of: code | qa | mock
 - practice_tasks[].id: kebab-case slug format.

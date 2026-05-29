@@ -334,6 +334,7 @@ export type CompanyListItem = {
   job_description: string | null;
   status: string;
   application_status: string | null;
+  target_id?: number | null;
 };
 
 export type PlacementListResponse = {
@@ -352,6 +353,7 @@ export type ApplicationItem = {
   job_description: string | null;
   application_status: string;
   applied_at: string;
+  target_id?: number | null;
 };
 
 export type ApplicationListResponse = {

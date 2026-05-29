@@ -228,6 +228,20 @@ def _generate_skeleton_plan(
     # Mix skill_list and topics for daily tasks
     all_topics = skill_list + topics
     
+    # Detect target language from role
+    is_java_role = any(k in role_lower for k in ["java", "spring", "jvm", "kotlin"])
+    is_js_role = any(k in role_lower for k in ["javascript", "typescript", "node", "react", "frontend", "angular", "vue"])
+    is_go_role = any(k in role_lower for k in ["golang", "go developer", "go backend"])
+    
+    if is_java_role:
+        language = "java"
+    elif is_js_role:
+        language = "javascript"
+    elif is_go_role:
+        language = "go"
+    else:
+        language = "python"
+        
     for day_num in range(1, days_to_plan + 1):
         tasks = []
 
@@ -245,8 +259,8 @@ def _generate_skeleton_plan(
                         "task_type": "code",
                         "qa_pairs": [],
                         "code_metadata": {
-                            "language": "python",
-                            "initial_code": f"# Solve {dsa_topic} problem\ndef solution():\n    pass",
+                            "language": language,
+                            "initial_code": f"// Solve {dsa_topic} problem\n" if language in ["java", "javascript", "go"] else f"# Solve {dsa_topic} problem\ndef solution():\n    pass",
                             "solution": "",
                             "difficulty": "Medium",
                             "examples": [],

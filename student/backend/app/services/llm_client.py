@@ -223,7 +223,7 @@ def build_learning_plan_prompt(context: dict) -> str:
     """
     Build the prompt for Prompt 1 (Roadmap Engine) in the new curriculum format.
     """
-    prompt_path = PROMPTS_DIR / "system_prompt.txt"
+    prompt_path = PROMPTS_DIR / "plan_prompt.txt"
     try:
         system_prompt = prompt_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:

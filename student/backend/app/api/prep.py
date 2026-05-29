@@ -283,29 +283,7 @@ def get_latest_prep_plan(
     if plan.status == "generating":
         raise HTTPException(status_code=404, detail="Plan is still generating")
 
-    # ── Return 404 for empty plan_json — support both new curriculum and legacy daily_plan ──
-    plan_json = plan.plan_json or {}
-    has_curriculum = isinstance(plan_json.get("curriculum"), list) and len(plan_json.get("curriculum", [])) > 0
-    has_daily_plan = isinstance(plan_json.get("daily_plan"), list) and len(plan_json.get("daily_plan", [])) > 0
-    if not has_curriculum and not has_daily_plan:
-        raise HTTPException(status_code=404, detail="Plan content not ready yet")
 
-    # ── Auto-detect wrong-role cached plan (legacy daily_plan format only) ──
-    # New curriculum format plans are trusted — they were generated with the correct role.
-    if plan.status == "ready" and plan.plan_json and not has_curriculum:
-        overview = (plan.plan_json.get("overview") or "").lower()
-        role_lower = (target.role or "").lower()
-
-        is_java_plan = any(k in overview for k in ["java/spring", "java backend", "spring boot", "java fundamentals", "fallback 14-day java"])
-        is_python_role = any(k in role_lower for k in ["python", "django", "fastapi", "flask"])
-        is_python_plan = any(k in overview for k in ["python", "django", "fastapi", "flask"])
-        is_java_role = any(k in role_lower for k in ["java", "spring"])
-
-        wrong_plan = (is_java_plan and is_python_role) or (is_python_plan and is_java_role)
-        if wrong_plan:
-            db.delete(plan)
-            db.commit()
-            raise HTTPException(status_code=404, detail="Plan not found — wrong role content, regenerating")
 
     return PlanDetailResponse(
         plan_id=plan.id,
@@ -328,12 +306,9 @@ def get_prep_status(
     Get the status of learning plan generation for a student.
     Returns: generating | ready | missing | failed
 
-    FALLBACK LOGIC:
     If the plan has been in 'generating' state for > 2 minutes (Celery worker likely not running),
-    generate a role-aware fallback plan directly in this request (synchronous, no Celery needed).
-    This ensures students always get a plan even without a running worker.
+    it will be marked as failed.
     """
-    from app.services.plan_service import _generate_fallback_plan, build_plan_signature
     from app.models import StudentProfile
 
     plan, target = _resolve_plan_for_target_id(db, student_id, target_id)
@@ -345,45 +320,20 @@ def get_prep_status(
 
     plan = _mark_stale_generating_as_failed(db, plan)
 
-    # ── Fallback: generate plan directly if worker is stuck ──────────────
+    # ── Fallback: mark as failed if worker is stuck ──────────────
     # If the plan has been generating for > FALLBACK_AFTER_MINUTES, the Celery worker
-    # is likely not running. Generate a role-aware fallback plan synchronously.
+    # is likely not running. Mark as failed.
     if plan.status == "generating":
         fallback_cutoff = datetime.utcnow() - timedelta(minutes=FALLBACK_AFTER_MINUTES)
         if plan.created_at < fallback_cutoff:
-            try:
-                profile = db.query(StudentProfile).filter(
-                    StudentProfile.student_id == student_id
-                ).first()
-                primary_skill = profile.primary_skill if profile else None
-                role = target.role or plan.role or "general"
-
-                fallback_data = _generate_fallback_plan(
-                    plan.days_available or 14,
-                    role=role,
-                    primary_skill=primary_skill,
-                )
-
-                plan.plan_json = fallback_data
-                plan.status = "ready"
-                plan.tasks_generated = 1
-                db.commit()
-                db.refresh(plan)
-
-                import logging
-                logging.getLogger(__name__).info(
-                    "[PREP-STATUS] Generated synchronous fallback plan for student_id=%s "
-                    "company=%s role=%s (worker was not running)",
-                    student_id, target.company_name, role
-                )
-            except Exception as fallback_exc:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "[PREP-STATUS] Fallback plan generation failed: %s", fallback_exc
-                )
-                # Mark as failed so frontend stops polling
-                plan.status = "failed"
-                db.commit()
+            plan.status = "failed"
+            db.commit()
+            
+            import logging
+            logging.getLogger(__name__).warning(
+                "[PREP-STATUS] Plan stuck in generating for > %s mins, marked as failed. student_id=%s",
+                FALLBACK_AFTER_MINUTES, student_id
+            )
 
     return PrepGenerateResponse(task_id=str(plan.id), status=plan.status)
 

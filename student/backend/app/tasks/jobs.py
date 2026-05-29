@@ -81,7 +81,6 @@ from app.services.llm_client import analyze_target_jd, LLMTimeoutError, LLMValid
 from app.services.plan_service import (
     build_plan_signature,
     generate_learning_plan,
-    _generate_fallback_plan,
 )
 from app.services.resume_service import parse_resume_file
 from app.services.skill_dictionary import extract_skills_from_text
@@ -425,107 +424,12 @@ def generate_plan_task(
                 if attempt < max_retries:
                     logger.info("[PLAN-LLM-RETRY] Retrying after error (attempt %d)", attempt + 1)
         
-        # ===== ALL RETRIES EXHAUSTED: GENERATE FALLBACK =====
+        # ===== ALL RETRIES EXHAUSTED: FAIL =====
         logger.error(
-            "[PLAN-FALLBACK] Plan generation failed after %d retries, generating fallback plan",
+            "[PLAN-LLM-ERROR] Plan generation failed after %d retries. Raising exception.",
             max_retries + 1,
         )
-
-        _profile = db.query(StudentProfile).filter(StudentProfile.student_id == student_id).first()
-        _gap = db.query(ResumeGapAnalysis).filter(ResumeGapAnalysis.student_id == student_id).order_by(ResumeGapAnalysis.created_at.desc()).first()
-        fallback_plan_data = _generate_fallback_plan(
-            days_available,
-            role=role,
-            primary_skill=_profile.primary_skill if _profile else None,
-            company_name=company_name,
-            support_mode=_profile.support_mode if _profile else "Guided",
-            missing_skills=_gap.missing_skills if _gap else [],
-        )
-        logger.info("[PLAN-FALLBACK] Fallback plan created with %d days", days_available)
-
-        # ── Use raw SQL UPDATE/INSERT to bypass SQLAlchemy session state ──
-        # The session may be in PendingRollbackError after failed LLM attempts.
-        # Raw SQL bypasses the ORM session entirely and always works.
-        import json as _json
-        from sqlalchemy import text as _text
-
-        plan_json_str = _json.dumps(fallback_plan_data)
-
-        # Close the dirty session and open a fresh one
-        try:
-            db.close()
-        except Exception:
-            pass
-        db = SessionLocal()
-
-        try:
-            # Try UPDATE first (stub exists from activation)
-            result = db.execute(
-                _text(
-                    "UPDATE learning_plans SET status='ready', plan_json=CAST(:pj AS json), "
-                    "tasks_generated=1 WHERE plan_signature=:sig"
-                ),
-                {"pj": plan_json_str, "sig": plan_signature},
-            )
-            db.commit()
-
-            if result.rowcount == 0:
-                # No existing row — INSERT
-                db.execute(
-                    _text(
-                        "INSERT INTO learning_plans "
-                        "(student_id, company_name, role, days_available, plan_signature, "
-                        "status, plan_json, tasks_generated, summary_generated, created_at) "
-                        "VALUES (:sid, :co, :ro, :da, :sig, 'ready', CAST(:pj AS json), 1, false, NOW())"
-                    ),
-                    {
-                        "sid": student_id,
-                        "co": company_name,
-                        "ro": role or "general",
-                        "da": days_available,
-                        "sig": plan_signature,
-                        "pj": plan_json_str,
-                    },
-                )
-                db.commit()
-
-            # Fetch the saved plan
-            fallback_plan = (
-                db.query(LearningPlan)
-                .filter(LearningPlan.plan_signature == plan_signature)
-                .first()
-            )
-
-        except Exception as raw_exc:
-            logger.error("[PLAN-FALLBACK] Raw SQL fallback also failed: %s", raw_exc)
-            return {"status": "failed", "error": str(raw_exc)}
-        
-        # Add learning tasks from fallback plan
-        for day_data in fallback_plan_data.get("daily_plan", []):
-            day_num = day_data["day"]
-            for task_index, task_data in enumerate(day_data["tasks"], start=1):
-                task = LearningTask(
-                    plan_id=fallback_plan.id,
-                    day=day_num,
-                    task_order=task_index,
-                    title=task_data["title"],
-                    description=task_data["description"],
-                    duration_minutes=task_data["duration_minutes"],
-                )
-                db.add(task)
-        
-        db.commit()
-        db.refresh(fallback_plan)
-        
-        logger.info("[PLAN-TYPE] fallback plan_id=%s", fallback_plan.id)
-        logger.info("[PLAN-FAILURE] reason=%s plan_id=%s", failure_reason, fallback_plan.id)
-        logger.info(
-            "[PLAN-FALLBACK] Fallback plan saved to DB plan_id=%s status=ready reason=%s",
-            fallback_plan.id,
-            type(last_error).__name__ if last_error else "unknown",
-        )
-        
-        return {"plan_id": fallback_plan.id, "status": "fallback_ready"}
+        raise Exception(f"AI Plan Generation failed after {max_retries + 1} retries: {str(last_error)}")
         
     except Exception as exc:
         # Final catch: should rarely happen, but ensure plan is marked failed (not left generating)

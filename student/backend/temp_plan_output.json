@@ -1,0 +1,421 @@
+{
+  "student_name": "Student",
+  "company": "Tech Startup",
+  "role": "Java Backend Developer",
+  "company_intelligence_used": false,
+  "target_readiness_score": 0,
+  "days_left": 14,
+  "roadmap_stages": [
+    {
+      "id": "foundation",
+      "title": "Foundation",
+      "description": "Core language and stack refresher to rebuild confidence before deep prep.",
+      "status": "not_started"
+    },
+    {
+      "id": "core-prep",
+      "title": "Core Prep",
+      "description": "The main study phase \u2014 high and medium priority topics mapped directly to the JD and role expectations.",
+      "status": "not_started"
+    },
+    {
+      "id": "behavioral-leadership",
+      "title": "Behavioral & Leadership",
+      "description": "STAR story preparation, communication calibration, and culture fit signals for this company.",
+      "status": "not_started"
+    }
+  ],
+  "curriculum": [
+    {
+      "category_id": "foundation-basics",
+      "category_title": "Foundation Basics",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "java-fundamentals",
+          "title": "Java Fundamentals",
+          "description": "This topic covers the essential syntax, object-oriented programming principles, and the Java Virtual Machine (JVM) architecture. It is critical as a foundational refresher for any Java development role, ensuring a baseline understanding of the language.",
+          "stage_id": "foundation",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "java-syntax-oop-basics",
+              "title": "Java Syntax & OOP Basics"
+            },
+            {
+              "id": "jvm-architecture-memory",
+              "title": "JVM Architecture & Memory"
+            }
+          ]
+        },
+        {
+          "id": "java-collections-framework",
+          "title": "Java Collections Framework",
+          "description": "This topic explores the core interfaces and classes within Java's Collections Framework, including Lists, Sets, and Maps. A solid grasp of these data structures is fundamental for efficient data handling in any Java backend application.",
+          "stage_id": "foundation",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "lists-sets-maps",
+              "title": "Lists, Sets, and Maps"
+            },
+            {
+              "id": "collections-utility-class",
+              "title": "Collections Utility Class"
+            }
+          ]
+        },
+        {
+          "id": "java-exception-handling",
+          "title": "Java Exception Handling",
+          "description": "This topic delves into Java's robust exception handling mechanisms, covering checked vs. unchecked exceptions, try-catch-finally blocks, and custom exceptions. Proper exception management is crucial for building resilient and maintainable backend services.",
+          "stage_id": "foundation",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "checked-unchecked-exceptions",
+              "title": "Checked vs. Unchecked Exceptions"
+            },
+            {
+              "id": "try-catch-finally-blocks",
+              "title": "Try-Catch-Finally Blocks"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "core-language-runtime",
+      "category_title": "Core Language & Runtime",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "java-concurrency-multithreading",
+          "title": "Java Concurrency & Multithreading",
+          "description": "This topic covers the principles of concurrent programming in Java, including threads, executors, locks, and atomic operations. Understanding concurrency is vital for designing high-performance and scalable backend systems that can handle multiple requests efficiently.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles requiring scalable solutions.",
+          "difficulty": "hard",
+          "mastery_time_minutes": 120,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "threads-executors",
+              "title": "Threads and Executors"
+            },
+            {
+              "id": "synchronization-locks",
+              "title": "Synchronization and Locks"
+            },
+            {
+              "id": "atomic-operations-concurrency-utilities",
+              "title": "Atomic Operations & Concurrency Utilities"
+            },
+            {
+              "id": "java-memory-model",
+              "title": "Java Memory Model"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "frameworks-libraries",
+      "category_title": "Frameworks & Libraries",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "spring-boot-fundamentals",
+          "title": "Spring Boot Fundamentals",
+          "description": "This topic introduces the core concepts of Spring Boot, including dependency injection, auto-configuration, and starter dependencies for rapid application development. Mastery of Spring Boot is a de-facto standard for modern Java backend roles due to its productivity and ecosystem.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles in startups seeking efficient development.",
+          "difficulty": "hard",
+          "mastery_time_minutes": 120,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "dependency-injection-inversion-of-control",
+              "title": "Dependency Injection & Inversion of Control"
+            },
+            {
+              "id": "spring-boot-auto-configuration",
+              "title": "Spring Boot Auto-Configuration"
+            },
+            {
+              "id": "spring-boot-starters-profiles",
+              "title": "Spring Boot Starters & Profiles"
+            },
+            {
+              "id": "rest-controllers-request-mapping",
+              "title": "REST Controllers & Request Mapping"
+            }
+          ]
+        },
+        {
+          "id": "jpa-hibernate",
+          "title": "JPA & Hibernate",
+          "description": "This topic explores Java Persistence API (JPA) and its most popular implementation, Hibernate, for object-relational mapping. Efficiently interacting with relational databases is critical for backend applications, and JPA/Hibernate streamline this process.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles requiring database interaction.",
+          "difficulty": "medium",
+          "mastery_time_minutes": 90,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "jpa-entities-relationships",
+              "title": "JPA Entities & Relationships"
+            },
+            {
+              "id": "hibernate-session-entity-manager",
+              "title": "Hibernate Session & Entity Manager"
+            },
+            {
+              "id": "caching-performance-tuning",
+              "title": "Caching & Performance Tuning"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "api-design-development",
+      "category_title": "API Design & Development",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "restful-api-design-implementation-java-spring",
+          "title": "RESTful API Design & Implementation (Java/Spring)",
+          "description": "This topic focuses on designing and implementing RESTful APIs using Java and the Spring framework, covering HTTP methods, status codes, and data serialization. Building well-structured and performant APIs is a primary responsibility for any backend developer.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles, as API development is a core function.",
+          "difficulty": "medium",
+          "mastery_time_minutes": 90,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "rest-principles-http-methods",
+              "title": "REST Principles & HTTP Methods"
+            },
+            {
+              "id": "data-serialization-json-xml",
+              "title": "Data Serialization (JSON/XML)"
+            },
+            {
+              "id": "spring-rest-controller-annotations",
+              "title": "Spring REST Controller Annotations"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "data-storage",
+      "category_title": "Data Storage",
+      "roi_label": "medium",
+      "topics": [
+        {
+          "id": "sql-database-concepts-jdbc",
+          "title": "SQL Database Concepts & JDBC",
+          "description": "This topic covers fundamental SQL concepts, relational database design, and Java Database Connectivity (JDBC) for direct database interaction. A strong understanding of SQL and JDBC is essential for managing and querying data in backend systems.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles, as database interaction is universal.",
+          "difficulty": "medium",
+          "mastery_time_minutes": 60,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "medium",
+          "sub_topics": [
+            {
+              "id": "sql-queries-joins",
+              "title": "SQL Queries & Joins"
+            },
+            {
+              "id": "database-normalization-indexing",
+              "title": "Database Normalization & Indexing"
+            },
+            {
+              "id": "jdbc-api-connection-pooling",
+              "title": "JDBC API & Connection Pooling"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "testing-devops",
+      "category_title": "Testing & DevOps",
+      "roi_label": "medium",
+      "topics": [
+        {
+          "id": "unit-testing-junit-mockito",
+          "title": "Unit Testing with JUnit & Mockito",
+          "description": "This topic focuses on writing effective unit tests for Java applications using JUnit and Mockito for mocking dependencies. Robust testing practices are crucial for delivering reliable and maintainable backend code.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "Implicit for 'Java Backend Developer' roles, as quality assurance through testing is expected.",
+          "difficulty": "medium",
+          "mastery_time_minutes": 60,
+          "is_critical_gap": true,
+          "proficiency_tag": "beginner",
+          "roi_label": "medium",
+          "sub_topics": [
+            {
+              "id": "junit-basics-assertions",
+              "title": "JUnit Basics & Assertions"
+            },
+            {
+              "id": "mockito-mocks-spies",
+              "title": "Mockito Mocks & Spies"
+            },
+            {
+              "id": "test-driven-development-principles",
+              "title": "Test-Driven Development Principles"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "behavioral-leadership",
+      "category_title": "Behavioral & Leadership",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "tell-me-about-yourself",
+          "title": "Tell Me About Yourself",
+          "description": "This topic guides you in crafting a concise and compelling personal narrative that highlights your relevant experience and career aspirations. Mastering this introduction sets a positive tone for the entire interview and demonstrates self-awareness.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": false,
+          "proficiency_tag": "intermediate",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "crafting-your-elevator-pitch",
+              "title": "Crafting Your Elevator Pitch"
+            },
+            {
+              "id": "tailoring-to-the-role",
+              "title": "Tailoring to the Role"
+            }
+          ]
+        },
+        {
+          "id": "company-research-motivation",
+          "title": "Company Research & Motivation",
+          "description": "This topic focuses on thoroughly researching Tech Startup's mission, products, culture, and recent news to articulate genuine interest and alignment. Demonstrating deep company knowledge is crucial for showing enthusiasm and fit for the role.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 45,
+          "is_critical_gap": false,
+          "proficiency_tag": "intermediate",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "researching-company-mission-products",
+              "title": "Researching Company Mission & Products"
+            },
+            {
+              "id": "articulating-your-motivation",
+              "title": "Articulating Your Motivation"
+            }
+          ]
+        },
+        {
+          "id": "star-method-for-behavioral-questions",
+          "title": "STAR Method for Behavioral Questions",
+          "description": "This topic teaches the STAR (Situation, Task, Action, Result) method for structuring clear, concise, and impactful responses to behavioral interview questions. Using STAR ensures your answers are comprehensive and effectively showcase your skills and experiences.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "medium",
+          "mastery_time_minutes": 60,
+          "is_critical_gap": false,
+          "proficiency_tag": "intermediate",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "situation-task-action-result-framework",
+              "title": "Situation, Task, Action, Result Framework"
+            },
+            {
+              "id": "identifying-key-competencies",
+              "title": "Identifying Key Competencies"
+            },
+            {
+              "id": "practicing-star-stories",
+              "title": "Practicing STAR Stories"
+            }
+          ]
+        },
+        {
+          "id": "handling-conflict-difficult-situations",
+          "title": "Handling Conflict & Difficult Situations",
+          "description": "This topic prepares you to discuss past experiences resolving workplace conflicts or navigating challenging professional scenarios with a focus on positive outcomes. Demonstrating maturity and problem-solving skills in difficult situations is highly valued in team environments.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "medium",
+          "mastery_time_minutes": 60,
+          "is_critical_gap": false,
+          "proficiency_tag": "intermediate",
+          "roi_label": "medium",
+          "sub_topics": [
+            {
+              "id": "conflict-resolution-strategies",
+              "title": "Conflict Resolution Strategies"
+            },
+            {
+              "id": "learning-from-failures",
+              "title": "Learning from Failures"
+            },
+            {
+              "id": "maintaining-professionalism",
+              "title": "Maintaining Professionalism"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "weak_areas": [
+    "Lacks foundational proficiency in the Java programming language, which is critical for a Java Backend Developer role.",
+    "Absence of hands-on experience with the Spring Boot framework, a modern standard for Java backend application development.",
+    "Limited practical knowledge of Java-specific Object-Relational Mapping (ORM) tools like JPA and Hibernate for database interaction.",
+    "Insufficient exposure to Java concurrency and multithreading mechanisms, essential for building scalable and high-performance backend systems.",
+    "Missing specific experience in designing and implementing RESTful APIs using Java and the Spring framework.",
+    "Unfamiliarity with standard Java unit testing frameworks such as JUnit and Mockito, crucial for ensuring code quality."
+  ],
+  "high_roi_topic_ids": [
+    "java-concurrency-multithreading",
+    "spring-boot-fundamentals",
+    "restful-api-design-implementation-java-spring",
+    "jpa-hibernate"
+  ],
+  "ats_score": 0,
+  "keyword_match_score": 0
+}

@@ -65,21 +65,25 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed top-0 left-0 h-screen w-[220px] bg-white border-r border-[#ececec] flex flex-col z-40">
-      {/* Brand */}
-      <div className="px-5 pt-7 pb-6">
+      {/* Logo */}
+      <div className="px-5 pt-7 pb-6 border-b border-[#f3f3f3]">
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-[#222222] flex items-center justify-center flex-shrink-0">
-            <span className="text-[#d9f36e] text-[11px] font-black">CA</span>
+          <div className="h-9 w-9 rounded-xl bg-[#d9f36e] flex items-center justify-center flex-shrink-0">
+            {/* Graduation cap icon — black on lime */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#222222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+              <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+            </svg>
           </div>
           <div>
-            <p className="text-[11px] font-bold text-[#222222] leading-none">College Admin</p>
-            <p className="text-[10px] text-[#aaaaaa] mt-0.5">Management Portal</p>
+            <p className="text-[13px] font-bold text-[#222222] leading-tight">CoPilot</p>
+            <p className="text-[10px] text-[#aaaaaa] leading-tight">College Admin</p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 space-y-0.5">
+      <nav className="flex-1 px-3 pt-4 space-y-0.5">
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -101,23 +105,15 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-3 pb-5 pt-3 border-t border-[#ececec]">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1">
-          <div className="h-7 w-7 rounded-full bg-[#d9f36e] flex items-center justify-center text-[#222222] text-[10px] font-black flex-shrink-0">
-            A
-          </div>
-          <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-[#222222] truncate">Admin</p>
-            <p className="text-[10px] text-[#aaaaaa]">College Admin</p>
-          </div>
-        </div>
+      {/* Sign Out — directly below nav, no profile section */}
+      <div className="px-3 pb-6 pt-2">
+        <div className="h-px bg-[#f3f3f3] mb-3" />
         <button
           type="button"
           onClick={() => void logout()}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium text-[#555555] hover:bg-[#f3f3f3] hover:text-[#222222] transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#555555] hover:bg-[#f3f3f3] hover:text-[#222222] transition-colors"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>

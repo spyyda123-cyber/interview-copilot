@@ -268,6 +268,19 @@ function Screen0Foundation({
 
   // Build foundation topics from AI curriculum — prefer stage_id="foundation" topics first,
   // then fall back to advanced/intermediate proficiency tags, then sessionStorage known skills
+  const isBehavioral = (t: any) => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    const cat = (t.category_id ?? "").toLowerCase();
+    return id.includes("behavioral") || id.includes("star") || id.includes("communication") ||
+      title.includes("behavioral") || title.includes("star") ||
+      title.includes("communication") || title.includes("leadership") ||
+      title.includes("hr") || title.includes("conflict") ||
+      title.includes("team") || title.includes("culture") ||
+      title.includes("tell me about yourself") || title.includes("research") ||
+      cat.includes("behavioral") || cat.includes("leadership");
+  };
+
   const allTopics = (dynamicPlan?.plan_json?.curriculum ?? []).flatMap(c => c.topics).filter(t => {
     const id = (t.id ?? "").toLowerCase();
     const title = (t.title ?? "").toLowerCase();
@@ -276,20 +289,20 @@ function Screen0Foundation({
     return true;
   });
 
-  // Primary: topics the AI explicitly placed in the foundation stage
-  let profileSkillTopics = allTopics.filter(t => t.stage_id === "foundation");
+  // Primary: topics the AI explicitly placed in the foundation stage, excluding behavioral topics
+  let profileSkillTopics = allTopics.filter(t => t.stage_id === "foundation" && !isBehavioral(t));
 
   // Fallback 1: topics tagged advanced or intermediate (student already knows them)
   if (profileSkillTopics.length === 0) {
     profileSkillTopics = allTopics.filter(
-      t => t.proficiency_tag === "advanced" || t.proficiency_tag === "intermediate"
+      t => (t.proficiency_tag === "advanced" || t.proficiency_tag === "intermediate") && !isBehavioral(t)
     );
   }
 
   // Fallback 2: fuzzy match against sessionStorage known_skills
   if (profileSkillTopics.length === 0 && knownSkills.length > 0) {
     profileSkillTopics = allTopics.filter(t =>
-      knownSkills.some(ks =>
+      !isBehavioral(t) && knownSkills.some(ks =>
         t.title.toLowerCase().includes(ks.skill.toLowerCase()) ||
         ks.skill.toLowerCase().includes(t.title.toLowerCase())
       )
@@ -298,11 +311,11 @@ function Screen0Foundation({
 
   // Fallback 3: inject primary skill match if not already present
   if (primarySkill && !profileSkillTopics.some(t => t.title.toLowerCase().includes(primarySkill.toLowerCase()))) {
-    const matched = allTopics.find(t => t.title.toLowerCase().includes(primarySkill.toLowerCase()));
+    const matched = allTopics.find(t => !isBehavioral(t) && t.title.toLowerCase().includes(primarySkill.toLowerCase()));
     if (matched) profileSkillTopics.unshift(matched);
   }
 
-  const foundationTopics = profileSkillTopics.length > 0 ? profileSkillTopics : defaultFoundationTopics;
+  const foundationTopics = profileSkillTopics;
   const weakAreas = dynamicPlan?.plan_json?.weak_areas ?? [];
 
   // profToMastery kept for progress bar color selection only (not for displaying numbers)
@@ -316,39 +329,6 @@ function Screen0Foundation({
   const avgMastery = foundationTopics.length > 0
     ? Math.round(totalPct / foundationTopics.length)
     : 0;
-
-  const foundationQuizQuestions = [
-    {
-      question: "What is the time complexity of searching in a balanced Binary Search Tree...",
-      options: ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
-      correct_index: 1,
-      explanation: "A balanced BST has height O(log n), so search, insert, and delete all run in O(log n).",
-    },
-    {
-      question: "Which data structure uses LIFO ordering...",
-      options: ["Queue", "Stack", "Linked List", "Hash Table"],
-      correct_index: 1,
-      explanation: "A Stack follows LIFO &mdash; the last element pushed is the first to be popped.",
-    },
-    {
-      question: "What is the average time complexity of insertion in a Hash Table...",
-      options: ["O(n)", "O(log n)", "O(1)", "O(n&sup2;)"],
-      correct_index: 2,
-      explanation: "Hash tables provide O(1) average-case insertion, lookup, and deletion.",
-    },
-    {
-      question: "Which sorting algorithm guarantees O(n log n) in all cases...",
-      options: ["Quick Sort", "Merge Sort", "Bubble Sort", "Insertion Sort"],
-      correct_index: 1,
-      explanation: "Merge Sort guarantees O(n log n) in best, average, and worst cases.",
-    },
-    {
-      question: "In a graph with V vertices and E edges, what is the space complexity of an adjacency list...",
-      options: ["O(V)", "O(E)", "O(V + E)", "O(V &times; E)"],
-      correct_index: 2,
-      explanation: "An adjacency list stores each vertex once (O(V)) and each edge once or twice (O(E)), giving O(V + E).",
-    },
-  ];
 
   return (
     <div className="sp-fade-up" style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -469,25 +449,6 @@ function Screen0Foundation({
           </p>
         </div>
       )}
-
-      {/* Foundation Quiz CTA */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "24px 26px", textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>&#127919;</div>
-        <h3 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 8px" }}>Foundation Mastery Quiz</h3>
-        <p style={{ fontSize: 13, color: C.textMuted, margin: "0 auto 18px", maxWidth: 440, lineHeight: 1.6 }}>
-          Test your understanding of core DSA fundamentals with 5 mixed-difficulty questions.
-        </p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 18 }}>
-          <Badge label="5 Questions" color={C.purpleLight} bg={C.purpleDim} />
-          <Badge label="~10 min" color={C.textMuted} bg={C.surface} />
-        </div>
-        <button
-          onClick={() => onNavigate("quiz", { quizTopic: "Foundation Mastery", quizQuestions: foundationQuizQuestions })}
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 28px", borderRadius: 10, background: C.purple, border: "none", color: C.white, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-        >
-          {Ico.play(13)} Start Foundation Quiz
-        </button>
-      </div>
     </div>
   );
 }
@@ -541,17 +502,30 @@ function Screen1PrepPlan({
   let knownSkills: Array<{skill: string; proficiency: string}> = [];
   try { knownSkills = JSON.parse(knownSkillsRaw); } catch { knownSkills = []; }
 
-  const allTopics = curriculum.flatMap(c => c.topics).filter(t => {
+  const isBehavioral = (t: any) => {
+    const id = (t.id ?? "").toLowerCase();
+    const title = (t.title ?? "").toLowerCase();
+    const cat = (t.category_id ?? "").toLowerCase();
+    return id.includes("behavioral") || id.includes("star") || id.includes("communication") ||
+      title.includes("behavioral") || title.includes("star") ||
+      title.includes("communication") || title.includes("leadership") ||
+      title.includes("hr") || title.includes("conflict") ||
+      title.includes("team") || title.includes("culture") ||
+      title.includes("tell me about yourself") || title.includes("research") ||
+      cat.includes("behavioral") || cat.includes("leadership");
+  };
+
+  const allTopics = curriculum.flatMap(c => c.topics.map(t => ({ ...t, category_id: c.category_id, category_title: c.category_title }))).filter(t => {
     const id = (t.id ?? "").toLowerCase();
     const title = (t.title ?? "").toLowerCase();
     if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
     if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
     return true;
   });
-  let profileSkillTopics = allTopics.filter(t => t.stage_id === "foundation");
+  let profileSkillTopics = allTopics.filter(t => (t.stage_id || "").toLowerCase() === "foundation");
   if (profileSkillTopics.length === 0) {
     profileSkillTopics = allTopics.filter(
-      t => t.proficiency_tag === "advanced" || t.proficiency_tag === "intermediate"
+      t => (t.proficiency_tag || "").toLowerCase() === "advanced" || (t.proficiency_tag || "").toLowerCase() === "intermediate"
     );
   }
   if (profileSkillTopics.length === 0 && knownSkills.length > 0) {
@@ -566,7 +540,18 @@ function Screen1PrepPlan({
     const matched = allTopics.find(t => t.title.toLowerCase().includes(primarySkill.toLowerCase()));
     if (matched) profileSkillTopics.unshift(matched);
   }
-  const foundationTopics = profileSkillTopics.length > 0 ? profileSkillTopics : defaultFoundationTopics;
+  
+  // Final Fallback: if still empty, pick easy topics, or just the first available topics
+  // so the module is never empty.
+  if (profileSkillTopics.length === 0 && allTopics.length > 0) {
+    let fallback = allTopics.filter(t => t.difficulty === "easy" && !isBehavioral(t));
+    if (fallback.length === 0) {
+      fallback = allTopics.filter(t => !isBehavioral(t));
+    }
+    profileSkillTopics = fallback;
+  }
+  
+  const foundationTopics = profileSkillTopics;
 
   const foundationCards = foundationTopics.slice(0, 4).map((topic) => {
     const live = getTopicLiveProgress(topic.id);
@@ -585,7 +570,7 @@ function Screen1PrepPlan({
     { title: "Time & Space Complexity Basics", status: "queued" as const, progress: 0, topicId: "complexity" },
   ];
 
-  const finalFoundationCards = foundationCards.length > 0 ? foundationCards : defaultFoundationCards;
+  const finalFoundationCards = foundationCards;
 
   // AI-generated roadmap stages (from Prompt 1 output)
   // Filter out any legacy gap/gaps-identification stages, System Design, and Mock Interview Simulation — removed from product
@@ -628,10 +613,10 @@ function Screen1PrepPlan({
       derivedStatus = quizDone ? "completed" : "active";
     } else if (id.includes("core-prep") || id.includes("core_prep") || id.includes("high-roi") || id.includes("high_roi") || id.includes("roi")) {
       // Core Prep: completed when all high_roi topics are completed
-      const allTopics = curriculum.flatMap(cat => cat.topics);
+      const allTopicsWithCat = curriculum.flatMap(c => c.topics.map(t => ({ ...t, category_id: c.category_id })));
       const corePrepTopics = highRoiIds.length > 0
-        ? highRoiIds.map(tid => allTopics.find(t => t.id === tid)).filter(Boolean) as typeof allTopics
-        : allTopics.filter(t => t.roi_label === "high").slice(0, 4);
+        ? highRoiIds.map(tid => allTopicsWithCat.find(t => t.id === tid)).filter(Boolean) as typeof allTopicsWithCat
+        : allTopicsWithCat.filter(t => t.roi_label === "high").slice(0, 4);
       const allDone = corePrepTopics.length > 0 && corePrepTopics.every(t => getTopicProgress(t.id) === "completed");
       const anyStarted = corePrepTopics.some(t => getTopicProgress(t.id) !== "not_started");
       derivedStatus = allDone ? "completed" : "active";
@@ -670,7 +655,7 @@ function Screen1PrepPlan({
   //   status="in-progress" → student opened it AND has actual task completion % stored
   //   status="completed"   → student explicitly completed all tasks
   //   progress %           → ONLY from coding_pct stored on actual submission, never from proficiency_tag
-  const allCurriculumTopics = curriculum.flatMap(cat => cat.topics).filter(t => {
+  const allCurriculumTopics = curriculum.flatMap(cat => cat.topics.map(t => ({ ...t, category_id: cat.category_id }))).filter(t => {
     const id = (t.id ?? "").toLowerCase();
     const title = (t.title ?? "").toLowerCase();
     if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
@@ -724,13 +709,7 @@ function Screen1PrepPlan({
 
   // Build behavioral topic cards from AI curriculum
   const behavioralCards = allCurriculumTopics
-    .filter(t =>
-      t.id?.includes("behavioral") || t.id?.includes("star") || t.id?.includes("communication") ||
-      t.title?.toLowerCase().includes("behavioral") || t.title?.toLowerCase().includes("star") ||
-      t.title?.toLowerCase().includes("communication") || t.title?.toLowerCase().includes("leadership") ||
-      t.title?.toLowerCase().includes("hr") || t.title?.toLowerCase().includes("conflict") ||
-      t.title?.toLowerCase().includes("team") || t.title?.toLowerCase().includes("culture")
-    )
+    .filter(isBehavioral)
     .slice(0, 4)
     .map(topic => ({
       title: topic.title,
@@ -738,13 +717,7 @@ function Screen1PrepPlan({
       topicId: topic.id,
     }));
 
-  const finalBehavioralCards = (behavioralCards.length > 0
-    ? behavioralCards
-    : defaultBehavioralTopics.slice(0, 4).map(t => ({
-        title: t.title,
-        status: "queued" as const,
-        topicId: t.id,
-      }))).map(tc => {
+  const finalBehavioralCards = behavioralCards.map(tc => {
     const live = getTopicLiveProgress(tc.topicId);
     return {
       title: tc.title,
@@ -1164,7 +1137,7 @@ function Screen2Curriculum({
       const title = (t.title ?? "").toLowerCase();
       if (id.includes("system") || id.includes("design") || title.includes("system design") || title.includes("architecture")) return false;
       if (id.includes("mock") || id.includes("simulation") || title.includes("mock") || title.includes("simulation")) return false;
-      if (t.stage_id === "foundation") return false;
+      if ((t.stage_id || "").toLowerCase() === "foundation") return false;
 
       // Apply filter tab
       const live = getTopicLiveProgress(t.id);
@@ -1385,6 +1358,9 @@ function Screen3TopicDetail({
   const [starError, setStarError] = useState<string | null>(null);
   const [showStarPractice, setShowStarPractice] = useState(false);
   const [selectedStarQuestion, setSelectedStarQuestion] = useState<string | null>(null);
+  
+  // Non-coding task modal state
+  const [selectedNonCodingTask, setSelectedNonCodingTask] = useState<any | null>(null);
 
   // Dynamic loader simulation for the premium overlay
   useEffect(() => {
@@ -1633,7 +1609,18 @@ function Screen3TopicDetail({
                         topicId: topicId,
                       });
                     } else {
-                      alert("This is a non-coding task. Please select a coding task to practice coding.");
+                      const task = topicContent?.practice_tasks?.find((t: any) => 
+                        t.id === p.taskId || t.title === p.title
+                      );
+                      if (task) {
+                        setSelectedNonCodingTask(task);
+                      } else {
+                        setSelectedNonCodingTask({
+                          title: p.title,
+                          task_type: "qa",
+                          question: "Description for this task is not currently available.",
+                        });
+                      }
                     }
                   }}
                   style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.surface, borderRadius: 8, cursor: "pointer" }}
@@ -1660,17 +1647,19 @@ function Screen3TopicDetail({
               );
             })}
           </div>
-          <button
-          onClick={() => onNavigate("coding", {
-              practiceTask: topicContent?.practice_tasks?.find(
-                (t: any) => t.task_type?.toLowerCase() === "code" || t.task_type?.toLowerCase() === "coding"
-              ) ?? null,
-              topicId: topicId,
-            })}
-            style={{ width: "100%", padding: "8px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-          >
-            View All Tasks
-          </button>
+          {topicContent?.practice_tasks?.some((t: any) => t.task_type?.toLowerCase() === "code" || t.task_type?.toLowerCase() === "coding") && (
+            <button
+            onClick={() => onNavigate("coding", {
+                practiceTask: topicContent?.practice_tasks?.find(
+                  (t: any) => t.task_type?.toLowerCase() === "code" || t.task_type?.toLowerCase() === "coding"
+                ) ?? null,
+                topicId: topicId,
+              })}
+              style={{ width: "100%", padding: "8px", borderRadius: 8, background: "none", border: `1px solid ${C.purpleDim}`, color: C.purpleLight, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+            >
+              View All Coding Tasks
+            </button>
+          )}
         </div>
       </div>
 
@@ -1694,6 +1683,7 @@ function Screen3TopicDetail({
                     quizTopic: topicTitle,
                     quizQuestions: aiQuizQuestions,
                     topicId: topicId,
+                    hasCodingTask: topicContent?.practice_tasks?.some((t: any) => t.task_type?.toLowerCase() === "code" || t.task_type?.toLowerCase() === "coding") ?? false,
                     onQuizComplete: () => {
                       if (studentId && targetId && topicId) {
                         localStorage.setItem(`quiz_done_${studentId}_${targetId}_${topicId}`, "true");
@@ -1808,6 +1798,98 @@ function Screen3TopicDetail({
           </div>
         </div>
       )}
+      {/* -- Non-coding Task Modal -- */}
+      {selectedNonCodingTask && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20
+        }}>
+          <div style={{
+            background: C.surface,
+            width: "100%",
+            maxWidth: 600,
+            maxHeight: "80vh",
+            borderRadius: 16,
+            overflowY: "auto",
+            padding: 32,
+            position: "relative",
+            border: `1px solid ${C.border}`,
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)"
+          }}>
+            <button
+              onClick={() => setSelectedNonCodingTask(null)}
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "transparent",
+                border: "none",
+                fontSize: 20,
+                color: C.textDim,
+                cursor: "pointer"
+              }}
+            >
+              &times;
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+              <Badge label={selectedNonCodingTask.task_type?.toUpperCase() || "PRACTICE"} color={C.purpleLight} bg={C.purpleDim} />
+              {selectedNonCodingTask.difficulty && (
+                <Badge label={selectedNonCodingTask.difficulty.toUpperCase()} color={C.textDim} bg={C.border} />
+              )}
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: "0 0 16px" }}>
+              {selectedNonCodingTask.title}
+            </h2>
+            <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.6 }}>
+              {selectedNonCodingTask.problem_statement && (
+                <div style={{ marginBottom: 16 }}>
+                  <strong>Scenario:</strong><br/>
+                  {selectedNonCodingTask.problem_statement}
+                </div>
+              )}
+              {selectedNonCodingTask.question && (
+                <div style={{ marginBottom: 16 }}>
+                  <strong>Question:</strong><br/>
+                  {selectedNonCodingTask.question}
+                </div>
+              )}
+              {selectedNonCodingTask.scenario && (
+                <div style={{ marginBottom: 16 }}>
+                  <strong>Mock Interview Scenario:</strong><br/>
+                  {selectedNonCodingTask.scenario}
+                </div>
+              )}
+              {selectedNonCodingTask.ideal_answer_points && selectedNonCodingTask.ideal_answer_points.length > 0 && selectedNonCodingTask.ideal_answer_points[0] !== "" && (
+                <div style={{ marginBottom: 16, background: C.card, padding: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                  <strong>Ideal Answer Points:</strong>
+                  <ul style={{ margin: "10px 0 0", paddingLeft: 20 }}>
+                    {selectedNonCodingTask.ideal_answer_points.map((pt: string, i: number) => (
+                      <li key={i} style={{ marginBottom: 6 }}>{pt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {selectedNonCodingTask.evaluation_criteria && selectedNonCodingTask.evaluation_criteria.length > 0 && selectedNonCodingTask.evaluation_criteria[0] !== "" && (
+                <div style={{ marginBottom: 16, background: C.card, padding: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                  <strong>Evaluation Criteria:</strong>
+                  <ul style={{ margin: "10px 0 0", paddingLeft: 20 }}>
+                    {selectedNonCodingTask.evaluation_criteria.map((pt: string, i: number) => (
+                      <li key={i} style={{ marginBottom: 6 }}>{pt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -2775,9 +2857,10 @@ function ScreenBehavioral({
     t.id?.includes("behavioral") || t.id?.includes("star") || t.id?.includes("communication") ||
     t.title?.toLowerCase().includes("behavioral") || t.title?.toLowerCase().includes("star") ||
     t.title?.toLowerCase().includes("communication") || t.title?.toLowerCase().includes("leadership") ||
-    t.title?.toLowerCase().includes("hr")
+    t.title?.toLowerCase().includes("hr") ||
+    t.stage_id?.toLowerCase().includes("behavioral") || t.stage_id?.toLowerCase().includes("leadership")
   );
-  const finalBehavioralTopics = behavioralTopics.length > 0 ? behavioralTopics : defaultBehavioralTopics;
+  const finalBehavioralTopics = behavioralTopics;
 
   const starQuestions = [
     { question: "Tell me about yourself.", hint: "Present -> Past -> Future. 60-90 seconds." },
@@ -2896,6 +2979,7 @@ function Screen7Quiz({
   quizQuestions?: Array<{question: string; options: string[]; correct_index: number; explanation: string}>;
   onNavigate: (s: string, extra?: Record<string, unknown>) => void;
   onQuizComplete?: () => void;
+  hasCodingTask?: boolean;
 }) {
   // Use AI-generated questions if available &mdash; no hardcoded fallback (topic-agnostic)
   const fallbackQuestions = [
@@ -3058,12 +3142,14 @@ function Screen7Quiz({
             >
               Back to Concept
             </button>
-            <button
-              onClick={() => onNavigate("coding")}
-              style={{ padding: "10px 24px", borderRadius: 10, background: "none", border: `1px solid #d9f36e`, color: "#555555", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-            >
-              {Ico.code(13)} Start Coding Task
-            </button>
+            {hasCodingTask && (
+              <button
+                onClick={() => onNavigate("coding")}
+                style={{ padding: "10px 24px", borderRadius: 10, background: "none", border: `1px solid #d9f36e`, color: "#555555", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                {Ico.code(13)} Start Coding Task
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -3352,15 +3438,7 @@ export default function StudyPlanPage() {
       });
     }
     
-    // Add default foundation topic IDs if they aren't in the list
-    defaultFoundationTopics.forEach(t => {
-      if (!list.includes(t.id)) list.push(t.id);
-    });
-    
-    // Add default behavioral topic IDs if they aren't in the list
-    defaultBehavioralTopics.forEach(t => {
-      if (!list.includes(t.id)) list.push(t.id);
-    });
+    // Default topics removed to enforce AI-only modules
     
     return list;
   }, [dynamicPlan]);
@@ -3719,6 +3797,7 @@ export default function StudyPlanPage() {
             quizQuestions={nav.quizQuestions || nav.extra?.quizQuestions}
             onNavigate={navigate}
             onQuizComplete={nav.onQuizComplete || nav.extra?.onQuizComplete}
+            hasCodingTask={nav.extra?.hasCodingTask as boolean | undefined}
           />
         );
       default:

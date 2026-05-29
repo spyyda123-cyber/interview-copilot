@@ -14,6 +14,8 @@ Never truncate content. Never summarize when detail is expected.
 A short or minimal response is a wrong response for this use case.
 The student is paying for depth — deliver it in every field.
 
+CRITICAL: You MUST generate topics for the 'foundation' stage and the 'behavioral-leadership' stage. Failing to generate topics with stage_id="foundation" or stage_id="behavioral-leadership" will break the system.
+
 ════════ CORE RULE ════════
 
 Build the curriculum around the TARGET ROLE + JD.
@@ -117,9 +119,9 @@ The roadmap has 3 fixed stages plus 1 conditional stage:
 STAGE 1 — foundation
 Purpose: Simple refresher topics on the core language and stack required for the role.
 Generated for ALL students regardless of proficiency level.
-Topic source: Derive foundation topics from the primary language and tech stack implied by the
-JD and required_skills — not from the student profile. Generate exactly 2–4 foundational
-refresher topics that any candidate for this role must be comfortable with before entering
+Topic source: Derive foundation topics STRICTLY from the primary language and tech stack implied by the
+target_interview JD and required_skills — IGNORE the student profile's primary_skill. (e.g., if the JD is for a Java Developer, the foundation topics MUST be Java, even if the student is a Python developer).
+Generate exactly 2–4 foundational refresher topics that any candidate for this role must be comfortable with before entering
 deep prep. Do not leave this stage empty.
 Topic rules for this stage:
 - difficulty must be "easy" only

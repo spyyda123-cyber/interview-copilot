@@ -172,6 +172,7 @@ type PlanDay = {
 type PlanJson = {
   overview?: string;
   daily_plan?: PlanDay[];
+  curriculum?: { category: string; topics: { title: string; description: string; mastery_time_minutes?: number; }[] }[];
   resources?: string[];
 };
 
@@ -499,33 +500,59 @@ export default function PlanPage() {
               <p className="text-sm leading-relaxed text-[var(--text-secondary)]">{planJson.overview || "Your plan is ready. Review the daily tasks below."}</p>
             </div>
 
-            {/* Daily plan */}
-            {planJson.daily_plan && planJson.daily_plan.length > 0 ? (
+            {/* Daily plan or Curriculum */}
+            {(planJson.daily_plan && planJson.daily_plan.length > 0) || (planJson.curriculum && planJson.curriculum.length > 0) ? (
               <div className="space-y-3">
-                {planJson.daily_plan.map((day) => (
-                  <div key={`day-${day.day}`} className="card overflow-hidden">
-                    <div className="flex items-center justify-between border-b border-[var(--border-light)] bg-[var(--bg-muted)] px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-100 to-violet-100 text-xs font-bold text-indigo-700">{day.day}</span>
-                        <h3 style={{ fontFamily: "var(--font-dm-sans), sans-serif" }} className="text-[13px] font-bold text-[var(--text-primary)]">Day {day.day}</h3>
-                      </div>
-                      <span className="badge badge-accent text-[11px]">{day.focus}</span>
-                    </div>
-                    <div className="divide-y divide-[var(--border-light)]">
-                      {day.tasks.map((task, index) => (
-                        <div key={`task-${day.day}-${index}`} className="px-5 py-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
-                              <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">{task.description}</p>
-                            </div>
-                            <span className="mt-0.5 flex-shrink-0 rounded-md bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 px-2 py-1 text-[11px] font-bold text-indigo-600">{task.duration_minutes}m</span>
-                          </div>
+                {planJson.curriculum ? (
+                  planJson.curriculum.map((cat, catIdx) => (
+                    <div key={`cat-${catIdx}`} className="card overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-[var(--border-light)] bg-[var(--bg-muted)] px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-100 to-violet-100 text-xs font-bold text-indigo-700">{catIdx + 1}</span>
+                          <h3 style={{ fontFamily: "var(--font-dm-sans), sans-serif" }} className="text-[13px] font-bold text-[var(--text-primary)]">{cat.category}</h3>
                         </div>
-                      ))}
+                      </div>
+                      <div className="divide-y divide-[var(--border-light)]">
+                        {cat.topics.map((task, index) => (
+                          <div key={`task-${catIdx}-${index}`} className="px-5 py-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
+                                <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">{task.description}</p>
+                              </div>
+                              <span className="mt-0.5 flex-shrink-0 rounded-md bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 px-2 py-1 text-[11px] font-bold text-indigo-600">{task.mastery_time_minutes || 60}m</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  planJson.daily_plan!.map((day) => (
+                    <div key={`day-${day.day}`} className="card overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-[var(--border-light)] bg-[var(--bg-muted)] px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-100 to-violet-100 text-xs font-bold text-indigo-700">{day.day}</span>
+                          <h3 style={{ fontFamily: "var(--font-dm-sans), sans-serif" }} className="text-[13px] font-bold text-[var(--text-primary)]">Day {day.day}</h3>
+                        </div>
+                        <span className="badge badge-accent text-[11px]">{day.focus}</span>
+                      </div>
+                      <div className="divide-y divide-[var(--border-light)]">
+                        {day.tasks.map((task, index) => (
+                          <div key={`task-${day.day}-${index}`} className="px-5 py-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</p>
+                                <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">{task.description}</p>
+                              </div>
+                              <span className="mt-0.5 flex-shrink-0 rounded-md bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 px-2 py-1 text-[11px] font-bold text-indigo-600">{task.duration_minutes}m</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             ) : (
               <div className="card p-6"><p className="text-sm text-[var(--text-muted)]">No daily tasks generated yet.</p></div>

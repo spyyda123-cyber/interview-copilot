@@ -45,6 +45,7 @@ class CompanyListItem(BaseModel):
     job_description: Optional[str]
     status: str
     application_status: Optional[str]  # Student's application status if any
+    target_id: Optional[int] = None
 
 
 class PlacementListResponse(BaseModel):
@@ -136,6 +137,9 @@ def list_placement_companies(
 
     app_map = {str(a.company_id): a.status for a in applications}
 
+    targets = db.query(TargetInterview).filter(TargetInterview.student_id == student_id).all()
+    target_map = {t.company_name: t.id for t in targets}
+
     items = []
     for comp in companies:
         items.append(
@@ -152,6 +156,7 @@ def list_placement_companies(
                 job_description=comp.job_description,
                 status=comp.status,
                 application_status=app_map.get(str(comp.id)),
+                target_id=target_map.get(comp.company_name),
             )
         )
 
@@ -178,6 +183,9 @@ def list_student_applications(
         .all()
     )
 
+    targets = db.query(TargetInterview).filter(TargetInterview.student_id == student_id).all()
+    target_map = {t.company_name: t.id for t in targets}
+
     result = []
     for app in applications:
         comp = db.query(PlacementCompany).filter(PlacementCompany.id == app.company_id).first()
@@ -194,6 +202,7 @@ def list_student_applications(
                 "application_status": app.status,
                 "applied_at": app.created_at.isoformat(),
                 "updated_at": app.updated_at.isoformat(),
+                "target_id": target_map.get(comp.company_name),
             })
 
     return {"applications": result, "total": len(result)}
@@ -336,25 +345,20 @@ def activate_company(payload: ActivateRequest, db: Session = Depends(get_db)):
         role = company.role or "general"
         plan_signature = build_plan_signature(student.id, company.company_name, role)
 
-        # Step 1: Delete ALL existing plans for this signature in a clean transaction
-        old_plans = (
+        # Check if a plan already exists for this signature
+        existing_plan = (
             db.query(LearningPlan)
             .filter(LearningPlan.plan_signature == plan_signature)
-            .all()
+            .order_by(LearningPlan.created_at.desc())
+            .first()
         )
-        deleted_count = len(old_plans)
-        for old_plan in old_plans:
-            db.delete(old_plan)
-
-        # Flush the deletes first, then commit — avoids UniqueViolation on insert
-        db.flush()
-        db.commit()
-
-        if deleted_count:
+        
+        if existing_plan:
             logger.info(
-                "[PLACEMENT-ACTIVATE] Deleted %d stale plan(s) for student_id=%s company=%s",
-                deleted_count, student.id, company.company_name
+                "[PLACEMENT-ACTIVATE] Plan already exists for student_id=%s company=%s, skipping generation",
+                student.id, company.company_name
             )
+            return {"status": "success", "company_id": str(company_uuid), "plan_exists": True}
 
         # Step 2: Insert fresh stub in a new transaction
         stub_plan = LearningPlan(

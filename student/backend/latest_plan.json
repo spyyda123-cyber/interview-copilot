@@ -1,0 +1,220 @@
+{
+  "student_name": "Student",
+  "company": "MockLiveCompany",
+  "role": "Java Backend Developer",
+  "company_intelligence_used": false,
+  "target_readiness_score": 0,
+  "days_left": 14,
+  "roadmap_stages": [
+    {
+      "id": "foundation",
+      "title": "Foundation",
+      "description": "Core language and stack refresher to rebuild confidence before deep prep."
+    },
+    {
+      "id": "core-prep",
+      "title": "Core Prep",
+      "description": "The main study phase \u2014 high and medium priority topics mapped directly to the JD and role expectations."
+    },
+    {
+      "id": "system-design",
+      "title": "System Design",
+      "description": "End-to-end system design practice tailored to MockLiveCompany engineering scale and interview format."
+    },
+    {
+      "id": "behavioral-leadership",
+      "title": "Behavioral & Leadership",
+      "description": "STAR story preparation, communication calibration, and culture fit signals for this company."
+    }
+  ],
+  "curriculum": [
+    {
+      "category_id": "foundation-basics",
+      "category_title": "Foundation Basics",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "java-syntax-fundamentals",
+          "title": "Java Syntax Fundamentals",
+          "description": "This topic covers core Java language constructs including collections, streams, and exception handling. It is critical for ensuring the candidate can write clean, idiomatic Java code during technical screenings.",
+          "stage_id": "foundation",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": true,
+          "proficiency_tag": "missing",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "java-collections-framework",
+              "title": "Java Collections Framework"
+            },
+            {
+              "id": "java-stream-api",
+              "title": "Java Stream API"
+            }
+          ]
+        },
+        {
+          "id": "spring-boot-basics",
+          "title": "Spring Boot Basics",
+          "description": "This topic covers the fundamental concepts of Spring Boot including dependency injection and application configuration. It is essential for any Java developer role requiring Spring Boot expertise.",
+          "stage_id": "foundation",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": true,
+          "proficiency_tag": "missing",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "dependency-injection-ioc",
+              "title": "Dependency Injection and IoC"
+            },
+            {
+              "id": "spring-boot-auto-configuration",
+              "title": "Spring Boot Auto-Configuration"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "core-language-runtime",
+      "category_title": "Core Language and Runtime",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "spring-boot-microservices",
+          "title": "Spring Boot Microservices",
+          "description": "This topic explores building and orchestrating microservices using Spring Boot and Spring Cloud. It is critical because the JD explicitly requires hands-on experience with microservices architecture.",
+          "stage_id": "core-prep",
+          "jd_relevance_note": "JD requires Java Spring Boot developer with microservices experience.",
+          "difficulty": "hard",
+          "mastery_time_minutes": 120,
+          "is_critical_gap": true,
+          "proficiency_tag": "missing",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "service-discovery-patterns",
+              "title": "Service Discovery Patterns"
+            },
+            {
+              "id": "api-gateway-implementation",
+              "title": "API Gateway Implementation"
+            },
+            {
+              "id": "distributed-tracing-sleuth",
+              "title": "Distributed Tracing with Sleuth"
+            },
+            {
+              "id": "circuit-breaker-resilience",
+              "title": "Circuit Breaker Resilience"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "system-design-architecture",
+      "category_title": "System Design Architecture",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "distributed-system-design",
+          "title": "Distributed System Design",
+          "description": "This topic covers designing scalable, fault-tolerant systems using microservices patterns. It is critical for the system design round to demonstrate architectural maturity at scale.",
+          "stage_id": "system-design",
+          "jd_relevance_note": "JD requires microservices experience which implies distributed system design knowledge.",
+          "difficulty": "hard",
+          "mastery_time_minutes": 120,
+          "is_critical_gap": true,
+          "proficiency_tag": "missing",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "load-balancing-strategies",
+              "title": "Load Balancing Strategies"
+            },
+            {
+              "id": "database-sharding-partitioning",
+              "title": "Database Sharding and Partitioning"
+            },
+            {
+              "id": "event-driven-architecture",
+              "title": "Event-Driven Architecture"
+            },
+            {
+              "id": "caching-strategies-redis",
+              "title": "Caching Strategies with Redis"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "behavioral-leadership",
+      "category_title": "Behavioral & Leadership",
+      "roi_label": "high",
+      "topics": [
+        {
+          "id": "tell-me-about-yourself",
+          "title": "Tell Me About Yourself",
+          "description": "This topic focuses on crafting a concise, professional narrative that bridges your past experience with the requirements of this Java Backend role. It is critical for setting a strong first impression during the initial screen.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": false,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "professional-summary-crafting",
+              "title": "Professional Summary Crafting"
+            },
+            {
+              "id": "technical-storytelling-alignment",
+              "title": "Technical Storytelling Alignment"
+            }
+          ]
+        },
+        {
+          "id": "company-research",
+          "title": "Company Research",
+          "description": "This topic involves analyzing MockLiveCompany's engineering culture and technical challenges to tailor your interview responses. It is critical for demonstrating genuine interest and cultural fit during the interview process.",
+          "stage_id": "behavioral-leadership",
+          "jd_relevance_note": null,
+          "difficulty": "easy",
+          "mastery_time_minutes": 30,
+          "is_critical_gap": false,
+          "proficiency_tag": "beginner",
+          "roi_label": "high",
+          "sub_topics": [
+            {
+              "id": "engineering-culture-analysis",
+              "title": "Engineering Culture Analysis"
+            },
+            {
+              "id": "product-alignment-strategy",
+              "title": "Product Alignment Strategy"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "weak_areas": [
+    "Lacks professional Java development experience despite the role being a Java Backend position.",
+    "No demonstrated experience with Spring Boot framework required by the JD.",
+    "Missing hands-on experience in building and deploying microservices architecture.",
+    "Unfamiliar with distributed system design patterns required for the system design round."
+  ],
+  "high_roi_topic_ids": [
+    "spring-boot-microservices",
+    "distributed-system-design"
+  ],
+  "ats_score": 0,
+  "keyword_match_score": 0
+}

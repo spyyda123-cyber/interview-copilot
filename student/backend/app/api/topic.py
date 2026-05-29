@@ -369,10 +369,26 @@ def get_topic_content(
         target_language = "JavaScript"
 
     interview_round_type = target.round_structure or "mixed"
+    
+    # Check if the topic is behavioral based on ID or category
+    is_topic_behavioral = False
+    if topic_data:
+        topic_lower = topic_id.lower()
+        title_lower = topic_data.get("title", "").lower()
+        stage_id = topic_data.get("stage_id", "").lower()
+        if "behavioral" in stage_id or "leadership" in stage_id:
+            is_topic_behavioral = True
+        elif any(k in topic_lower or k in title_lower for k in [
+            "conflict", "leadership", "culture", "ethical", "pressure",
+            "feedback", "adapt", "stakeholder", "goal", "failure", "team",
+            "behavioral", "star", "hr", "communication", "tell me about yourself",
+            "research", "company research"
+        ]):
+            is_topic_behavioral = True
 
     # 5. Generate content via Prompt 2 (v1.1)
     mastery_time_minutes = topic_data.get("mastery_time_minutes", 60)
-    coding_required = profile.coding_required if profile else True
+    coding_required = False if is_topic_behavioral else (profile.coding_required if profile else True)
 
     logger.info("[TOPIC] Cache miss — generating content for student_id=%s topic_id=%s", student_id, topic_id)
     try:

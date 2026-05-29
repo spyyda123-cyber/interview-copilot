@@ -109,7 +109,7 @@ PLAN_SCHEMA: Dict[str, Any] = {
                                     "id": {"type": "string"},
                                     "title": {"type": "string"},
                                     "description": {"type": "string"},
-                                    "stage_id": {"type": "string"},
+                                    "stage_id": {"type": "string", "enum": ["foundation", "core-prep", "system-design", "behavioral-leadership"]},
                                     "jd_relevance_note": {"type": ["string", "null"]},
                                     "difficulty": {"type": "string", "enum": ["easy", "medium", "hard"]},
                                     "mastery_time_minutes": {"type": "integer"},
@@ -225,7 +225,7 @@ def _get_client() -> "OpenAI":
 
 
 def _load_system_prompt() -> str:
-    prompt_path = PROMPTS_DIR / "system_prompt.txt"
+    prompt_path = PROMPTS_DIR / "plan_prompt.txt"
     try:
         return prompt_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
